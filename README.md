@@ -14,10 +14,6 @@ PocketBudget KE is an offline-first Android application designed to help users m
 -   `bugfix/bug-description`
 -   `hotfix/critical-fix`
 
-## PR Rules
-1.  Ensure code compiles.
-2.  Follow coding standards.
-3.  Review your own code before submitting.
 
 ## Architecture
 -   **UI**: Fragments + XML Layouts
