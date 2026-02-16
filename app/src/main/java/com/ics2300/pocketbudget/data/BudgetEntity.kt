@@ -8,5 +8,6 @@ data class BudgetEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val amount: Double,
     val month: Int,
-    val year: Int
+    val year: Int,
+    val categoryId: Int? = null // Optional: budget per category
 )
