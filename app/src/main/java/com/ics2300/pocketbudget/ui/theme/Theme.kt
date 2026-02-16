@@ -12,32 +12,34 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = BrandLightGreen,
+    secondary = BrandSecondaryGreen,
+    tertiary = AnalyticsTeal,
+    background = BrandDarkGreen,
+    surface = BrandSecondaryGreen,
+    onPrimary = BrandDarkGreen,
+    onSecondary = BrandLightGreen,
+    onBackground = BrandBackgroundGray,
+    onSurface = BrandBackgroundGray
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    primary = BrandDarkGreen,
+    secondary = BrandSecondaryGreen,
+    tertiary = AnalyticsTeal,
+    background = BrandBackgroundGray,
+    surface = AnalyticsSurface,
+    onPrimary = AnalyticsSurface,
+    onSecondary = AnalyticsSurface,
+    onBackground = TextPrimary,
+    onSurface = TextPrimary
 )
 
 @Composable
 fun PocketbudgetTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false, // Disable dynamic color to enforce brand consistency
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

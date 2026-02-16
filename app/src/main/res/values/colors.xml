@@ -1,10 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Brand Colors (Green Palette) -->
+    <color name="brand_dark_green">#0A3D2E</color>  <!-- Main Header/Background -->
+    <color name="brand_light_green">#D4E157</color> <!-- Accents (Buttons, Balance) -->
+    <color name="brand_secondary_green">#1B5E20</color> <!-- Darker elements -->
+    <color name="brand_background_gray">#F5F7F6</color> <!-- App Background -->
+    
+    <!-- Text Colors -->
+    <color name="text_primary">#212121</color>
+    <color name="text_secondary">#757575</color>
+    <color name="text_on_dark">#FFFFFF</color>
+    <color name="text_hint">#BDBDBD</color>
+
+    <!-- UI Elements -->
+    <color name="icon_tint_dark">#0A3D2E</color>
+    <color name="icon_tint_light">#FFFFFF</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="divider_color">#EEEEEE</color>
+    
+    <!-- Status Colors -->
+    <color name="status_success">#4CAF50</color>
+    <color name="status_error">#F44336</color>
+    <color name="status_warning">#FF9800</color>
+
+    <!-- Analytics Colors -->
+    <color name="analytics_teal">#00BFA5</color>
+    <color name="analytics_coral">#FF7043</color>
+    <color name="analytics_purple">#7E57C2</color>
+    <color name="analytics_bg">#F5F7FA</color>
+    <color name="chart_grid_line">#EEEEEE</color>
+    <color name="chart_axis_text">#9E9E9E</color>
+
+    <!-- Legacy Colors (kept for compatibility if needed) -->
     <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <color name="purple_500">#0A3D2E</color> <!-- Replaced with brand dark -->
+    <color name="purple_700">#05231A</color>
+    <color name="teal_200">#D4E157</color>
+    <color name="teal_700">#018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 </resources>
