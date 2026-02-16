@@ -17,12 +17,18 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Pocketbudget">
+        
         <receiver android:name=".receivers.SmsReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
+
+        <activity 
+            android:name=".ui.transactions.TransactionDetailActivity"
+            android:exported="false"
+            android:label="Transaction Details" />
 
         <activity
             android:name=".ui.OnboardingActivity"
