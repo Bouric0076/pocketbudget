@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/brand_background_gray">
+    android:fitsSystemWindows="true">
 
     <!-- Scrollable Content -->
     <!-- Starts below header approx height 200dp -->
@@ -16,6 +16,7 @@
         android:paddingHorizontal="16dp"
         android:paddingBottom="100dp"
         android:clipToPadding="false"
+        android:background="@color/brand_background_gray"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         tools:listitem="@layout/item_budget"/>

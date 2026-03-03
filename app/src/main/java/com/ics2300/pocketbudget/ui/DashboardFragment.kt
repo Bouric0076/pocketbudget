@@ -22,11 +22,21 @@ import com.ics2300.pocketbudget.databinding.FragmentDashboardBinding
 import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
 import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModelFactory
 import com.ics2300.pocketbudget.ui.dashboard.TimeRange
+import com.ics2300.pocketbudget.ui.dashboard.SyncResult
 import com.ics2300.pocketbudget.utils.CurrencyFormatter
 import com.ics2300.pocketbudget.utils.TransactionGrouper
 
 import com.google.android.material.snackbar.Snackbar
-import com.ics2300.pocketbudget.ui.dashboard.SyncResult
+import com.github.mikephil.charting.charts.BarChart
+import com.github.mikephil.charting.charts.LineChart
+import com.github.mikephil.charting.data.BarData
+import com.github.mikephil.charting.data.BarDataSet
+import com.github.mikephil.charting.data.BarEntry
+import com.github.mikephil.charting.data.LineData
+import com.github.mikephil.charting.data.LineDataSet
+import com.github.mikephil.charting.data.Entry
+import com.github.mikephil.charting.components.XAxis
+import com.github.mikephil.charting.formatter.IndexAxisValueFormatter
 
 class DashboardFragment : Fragment() {
 
@@ -118,6 +128,8 @@ class DashboardFragment : Fragment() {
         setupTimeRangeTabs()
         setupQuickActions()
         setupRecentTransactions()
+        setupCharts()
+        setupSummaryObservers()
 
         // Observe Stats
         viewModel.dashboardStats.observe(viewLifecycleOwner) { stats ->
@@ -273,6 +285,105 @@ class DashboardFragment : Fragment() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun setupCharts() {
+        setupWeeklyChart()
+        setupMonthlyChart()
+    }
+
+    private fun setupWeeklyChart() {
+        val weeklyChart = binding.chartWeekly
+        weeklyChart.description.isEnabled = false
+        weeklyChart.legend.isEnabled = true
+        weeklyChart.setTouchEnabled(true)
+        weeklyChart.setDragEnabled(true)
+        weeklyChart.setScaleEnabled(true)
+        
+        viewModel.weeklyBreakdown.observe(viewLifecycleOwner) { chartDataList ->
+            val entries = chartDataList.mapIndexed { index, data ->
+                BarEntry(index.toFloat(), data.value.toFloat())
+            }
+            
+            val dataSet = BarDataSet(entries, "Spending").apply {
+                color = requireContext().getColor(R.color.brand_dark_green)
+                valueTextSize = 10f
+            }
+            
+            val barData = BarData(dataSet)
+            weeklyChart.data = barData
+            
+            val xAxis = weeklyChart.xAxis
+            xAxis.position = XAxis.XAxisPosition.BOTTOM
+            xAxis.valueFormatter = IndexAxisValueFormatter(
+                chartDataList.map { it.label }
+            )
+            
+            weeklyChart.invalidate()
+        }
+    }
+
+    private fun setupMonthlyChart() {
+        val monthlyChart = binding.chartMonthly
+        monthlyChart.description.isEnabled = false
+        monthlyChart.legend.isEnabled = true
+        monthlyChart.setTouchEnabled(true)
+        monthlyChart.setDragEnabled(true)
+        monthlyChart.setScaleEnabled(true)
+        
+        viewModel.monthlyBreakdown.observe(viewLifecycleOwner) { chartDataList ->
+            val entries = chartDataList.mapIndexed { index, data ->
+                Entry(index.toFloat(), data.value.toFloat())
+            }
+            
+            val dataSet = LineDataSet(entries, "Monthly Spending").apply {
+                color = requireContext().getColor(R.color.brand_light_green)
+                setCircleColor(requireContext().getColor(R.color.brand_dark_green))
+                lineWidth = 2f
+                setDrawCircles(true)
+                valueTextSize = 10f
+            }
+            
+            val lineData = LineData(dataSet)
+            monthlyChart.data = lineData
+            
+            val xAxis = monthlyChart.xAxis
+            xAxis.position = XAxis.XAxisPosition.BOTTOM
+            xAxis.valueFormatter = IndexAxisValueFormatter(
+                chartDataList.map { it.label }
+            )
+            
+            monthlyChart.invalidate()
+        }
+    }
+
+    private fun setupSummaryObservers() {
+        // Total Spent
+        viewModel.totalSpent.observe(viewLifecycleOwner) { amount ->
+            binding.textTotalSpent.text = CurrencyFormatter.formatKsh(amount)
+            val progress = (amount / 10000.0 * 100).coerceIn(0.0, 100.0).toInt()
+            binding.progressSpent.progress = progress
+        }
+
+        // Total Received
+        viewModel.totalReceived.observe(viewLifecycleOwner) { amount ->
+            binding.textTotalReceived.text = CurrencyFormatter.formatKsh(amount)
+            val progress = (amount / 15000.0 * 100).coerceIn(0.0, 100.0).toInt()
+            binding.progressReceived.progress = progress
+        }
+
+        // Top Category
+        viewModel.topCategory.observe(viewLifecycleOwner) { topCat ->
+            if (topCat != null) {
+                binding.textTopCategoryName.text = topCat.name
+                binding.textTopCategoryAmount.text = CurrencyFormatter.formatKsh(topCat.amount)
+                binding.textTopCategoryCount.text = "${topCat.count} transactions"
+            } else {
+                binding.textTopCategoryName.text = "No Data"
+                binding.textTopCategoryAmount.text = "Ksh 0"
+                binding.textTopCategoryCount.text = "0 transactions"
+            }
+        }
     }
 
     override fun onDestroyView() {
