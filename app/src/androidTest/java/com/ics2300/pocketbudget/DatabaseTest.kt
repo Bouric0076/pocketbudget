@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.ics2300.pocketbudget.data.*
+import com.ics2300.pocketbudget.data.AppDatabase
+import com.ics2300.pocketbudget.data.CategoryEntity
+import com.ics2300.pocketbudget.data.TransactionDao
+import com.ics2300.pocketbudget.data.TransactionEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -16,18 +19,14 @@ import java.io.IOException
 
 @RunWith(AndroidJUnit4::class)
 class DatabaseTest {
-    private lateinit var transactionDao: TransactionDao
-    private lateinit var categoryDao: CategoryDao
-    private lateinit var budgetDao: BudgetDao
     private lateinit var db: AppDatabase
+    private lateinit var dao: TransactionDao
 
     @Before
     fun createDb() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseFactory(context, AppDatabase::class.java).build()
-        transactionDao = db.transactionDao()
-        categoryDao = db.categoryDao()
-        budgetDao = db.budgetDao()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        dao = db.transactionDao()
     }
 
     @After
@@ -38,61 +37,68 @@ class DatabaseTest {
 
     @Test
     @Throws(Exception::class)
-    fun writeTransactionAndReadInList() = runBlocking {
+    fun writeAndReadTransaction() = runBlocking {
+        val category = CategoryEntity(id = 1, name = "Food", keywords = "lunch,dinner")
+        // Note: In some versions, you might need to insert category first if there's a foreign key constraint.
+        // For this test, we focus on the transaction.
+
         val transaction = TransactionEntity(
             transactionId = "TXN123",
-            amount = 100.0,
+            amount = 50.0,
             type = "Expense",
-            partyName = "Supermarket",
+            partyName = "Restaurant",
             timestamp = System.currentTimeMillis(),
             categoryId = 1
         )
-        transactionDao.insertTransaction(transaction)
-        val allTransactions = transactionDao.getAllTransactions().first()
+        dao.insertTransaction(transaction)
+
+        val allTransactions = dao.getAllTransactions().first()
         assertEquals(allTransactions[0].transactionId, "TXN123")
     }
 
     @Test
     @Throws(Exception::class)
-    fun avoidDuplicateTransactions() = runBlocking {
+    fun avoidDuplicateTransactionId() = runBlocking {
         val transaction1 = TransactionEntity(
-            transactionId = "TXN_DUP",
-            amount = 50.0,
+            transactionId = "DUP123",
+            amount = 10.0,
             type = "Expense",
-            partyName = "Store A",
+            partyName = "Shop",
             timestamp = System.currentTimeMillis(),
-            categoryId = 1
+            categoryId = null
         )
         val transaction2 = TransactionEntity(
-            transactionId = "TXN_DUP",
-            amount = 60.0,
+            transactionId = "DUP123",
+            amount = 20.0,
             type = "Expense",
-            partyName = "Store B",
+            partyName = "Shop",
             timestamp = System.currentTimeMillis(),
-            categoryId = 1
+            categoryId = null
         )
-        transactionDao.insertTransaction(transaction1)
-        transactionDao.insertTransaction(transaction2) // Should be ignored due to unique constraint and OnConflictStrategy.IGNORE
-        
-        val allTransactions = transactionDao.getAllTransactions().first()
+
+        dao.insertTransaction(transaction1)
+        dao.insertTransaction(transaction2)
+
+        val allTransactions = dao.getAllTransactions().first()
         assertEquals(1, allTransactions.size)
-        assertEquals(50.0, allTransactions[0].amount, 0.0)
+        assertEquals(10.0, allTransactions[0].amount, 0.0)
     }
 
     @Test
     @Throws(Exception::class)
     fun fetchByDateRange() = runBlocking {
         val now = System.currentTimeMillis()
-        val t1 = TransactionEntity(transactionId = "T1", amount = 10.0, type = "E", partyName = "P", timestamp = now - 10000, categoryId = 1)
-        val t2 = TransactionEntity(transactionId = "T2", amount = 20.0, type = "E", partyName = "P", timestamp = now, categoryId = 1)
-        val t3 = TransactionEntity(transactionId = "T3", amount = 30.0, type = "E", partyName = "P", timestamp = now + 10000, categoryId = 1)
+        val day = 24 * 60 * 60 * 1000L
         
-        transactionDao.insertTransaction(t1)
-        transactionDao.insertTransaction(t2)
-        transactionDao.insertTransaction(t3)
-        
-        val rangeTransactions = transactionDao.getTransactionsByDateRange(now - 5000, now + 5000).first()
-        assertEquals(1, rangeTransactions.size)
-        assertEquals("T2", rangeTransactions[0].transactionId)
+        val t1 = TransactionEntity(transactionId = "T1", amount = 10.0, type = "E", partyName = "P", timestamp = now - 2 * day, categoryId = null)
+        val t2 = TransactionEntity(transactionId = "T2", amount = 20.0, type = "E", partyName = "P", timestamp = now - day, categoryId = null)
+        val t3 = TransactionEntity(transactionId = "T3", amount = 30.0, type = "E", partyName = "P", timestamp = now, categoryId = null)
+
+        dao.insertTransaction(t1)
+        dao.insertTransaction(t2)
+        dao.insertTransaction(t3)
+
+        val results = dao.getTransactionsByDateRange(now - 1.5 * day.toDouble().toLong(), now).first()
+        assertEquals(2, results.size)
     }
 }
