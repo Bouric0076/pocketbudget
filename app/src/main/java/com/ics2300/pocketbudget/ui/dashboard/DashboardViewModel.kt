@@ -301,6 +301,113 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
     private val _syncStatus = MutableLiveData<SyncResult>()
     val syncStatus: LiveData<SyncResult> = _syncStatus
 
+    // Summary Calculations for Enhanced Dashboard
+    val totalSpent: LiveData<Double> = combine(
+        repository.allTransactions,
+        timeRange
+    ) { transactions, range ->
+        val (start, end) = getTimestampRange(range)
+        transactions
+            .filter { it.timestamp in start..end && (it.type != "Received" && it.type != "Deposit") }
+            .sumOf { it.amount }
+    }.asLiveData()
+
+    val totalReceived: LiveData<Double> = combine(
+        repository.allTransactions,
+        timeRange
+    ) { transactions, range ->
+        val (start, end) = getTimestampRange(range)
+        transactions
+            .filter { it.timestamp in start..end && (it.type == "Received" || it.type == "Deposit") }
+            .sumOf { it.amount }
+    }.asLiveData()
+
+    // Top Category (most spending)
+    data class TopCategory(val name: String, val amount: Double, val count: Int)
+    
+    val topCategory: LiveData<TopCategory?> = combine(
+        repository.allTransactions,
+        timeRange
+    ) { transactions, range ->
+        val (start, end) = getTimestampRange(range)
+        val filtered = transactions.filter { 
+            it.timestamp in start..end && (it.type != "Received" && it.type != "Deposit")
+        }
+        
+        val byCategory = filtered.groupBy { it.categoryId }
+            .map { (catId, txns) ->
+                val catName = "Category"
+                TopCategory(catName, txns.sumOf { it.amount }, txns.size)
+            }
+        
+        byCategory.maxByOrNull { it.amount }
+    }.asLiveData()
+
+    // Weekly breakdown (last 7 days)
+    val weeklyBreakdown: LiveData<List<ChartData>> = combine(
+        repository.allTransactions,
+        timeRange
+    ) { transactions, _ ->
+        val today = Calendar.getInstance()
+        val days = (0..6).map { 
+            val cal = today.clone() as Calendar
+            cal.add(Calendar.DAY_OF_YEAR, -it)
+            cal
+        }.reversed()
+        
+        days.map { day ->
+            val start = day.clone() as Calendar
+            start.set(Calendar.HOUR_OF_DAY, 0)
+            start.set(Calendar.MINUTE, 0)
+            start.set(Calendar.SECOND, 0)
+            
+            val end = day.clone() as Calendar
+            end.set(Calendar.HOUR_OF_DAY, 23)
+            end.set(Calendar.MINUTE, 59)
+            end.set(Calendar.SECOND, 59)
+            
+            val dayTotal = transactions.filter { 
+                it.timestamp >= start.timeInMillis && it.timestamp <= end.timeInMillis && (it.type != "Received" && it.type != "Deposit")
+            }.sumOf { it.amount }
+            
+            val label = SimpleDateFormat("EEE", Locale.getDefault()).format(day.time)
+            ChartData(label, dayTotal)
+        }
+    }.asLiveData()
+
+    // Monthly breakdown (last 12 months)
+    val monthlyBreakdown: LiveData<List<ChartData>> = combine(
+        repository.allTransactions,
+        timeRange
+    ) { transactions, _ ->
+        val months = (0..11).map { 
+            val cal = Calendar.getInstance()
+            cal.add(Calendar.MONTH, -it)
+            cal
+        }.reversed()
+        
+        months.map { month ->
+            val startCal = month.clone() as Calendar
+            startCal.set(Calendar.DAY_OF_MONTH, 1)
+            startCal.set(Calendar.HOUR_OF_DAY, 0)
+            startCal.set(Calendar.MINUTE, 0)
+            startCal.set(Calendar.SECOND, 0)
+            
+            val endCal = month.clone() as Calendar
+            endCal.set(Calendar.DAY_OF_MONTH, endCal.getActualMaximum(Calendar.DAY_OF_MONTH))
+            endCal.set(Calendar.HOUR_OF_DAY, 23)
+            endCal.set(Calendar.MINUTE, 59)
+            endCal.set(Calendar.SECOND, 59)
+            
+            val monthTotal = transactions.filter { 
+                it.timestamp >= startCal.timeInMillis && it.timestamp <= endCal.timeInMillis && (it.type != "Received" && it.type != "Deposit")
+            }.sumOf { it.amount }
+            
+            val label = SimpleDateFormat("MMM", Locale.getDefault()).format(month.time)
+            ChartData(label, monthTotal)
+        }
+    }.asLiveData()
+
     fun syncSms() {
         viewModelScope.launch {
             _syncStatus.value = SyncResult.Loading
