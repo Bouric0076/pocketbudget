@@ -1,4 +1,4 @@
-package com.ics2300.pocketbudget 
+package com.ics2300.pocketbudget  
 
 import android.content.Context
 import androidx.room.Room
