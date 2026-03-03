@@ -39,8 +39,7 @@ class DatabaseTest {
     @Throws(Exception::class)
     fun writeAndReadTransaction() = runBlocking {
         val category = CategoryEntity(id = 1, name = "Food", keywords = "lunch,dinner")
-        // Note: In some versions, you might need to insert category first if there's a foreign key constraint.
-        // For this test, we focus on the transaction.
+        dao.insertCategory(category)
 
         val transaction = TransactionEntity(
             transactionId = "TXN123",
