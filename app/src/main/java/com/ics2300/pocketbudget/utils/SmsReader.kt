@@ -6,8 +6,10 @@ import android.provider.Telephony
 
 class SmsReader(private val context: Context) {
 
-    fun readMpesaMessages(afterTimestamp: Long = 0L): List<String> {
-        val messages = mutableListOf<String>()
+    data class SmsData(val body: String, val date: Long)
+
+    fun readMpesaMessages(afterTimestamp: Long = 0L): List<SmsData> {
+        val messages = mutableListOf<SmsData>()
         val uri = Telephony.Sms.Inbox.CONTENT_URI
         val projection = arrayOf(Telephony.Sms.BODY, Telephony.Sms.DATE)
         
@@ -27,9 +29,13 @@ class SmsReader(private val context: Context) {
 
             cursor?.use {
                 val bodyIndex = it.getColumnIndex(Telephony.Sms.BODY)
+                val dateIndex = it.getColumnIndex(Telephony.Sms.DATE)
+                
                 while (it.moveToNext()) {
-                    if (bodyIndex != -1) {
-                        messages.add(it.getString(bodyIndex))
+                    if (bodyIndex != -1 && dateIndex != -1) {
+                        val body = it.getString(bodyIndex)
+                        val date = it.getLong(dateIndex)
+                        messages.add(SmsData(body, date))
                     }
                 }
             }

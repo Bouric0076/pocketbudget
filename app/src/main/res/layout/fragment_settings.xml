@@ -21,6 +21,182 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- Premium Banner -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="4dp"
+                app:cardBackgroundColor="@color/white"
+                android:layout_marginBottom="24dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:src="@drawable/ic_launcher_foreground"
+                            app:tint="#D4E157"
+                            android:layout_marginEnd="16dp"/>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Subscription"
+                                android:textSize="14sp"
+                                android:textColor="@color/text_secondary"/>
+
+                            <TextView
+                                android:id="@+id/text_premium_status"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Free Plan"
+                                android:textSize="18sp"
+                                android:textStyle="bold"
+                                android:textColor="@color/text_primary"/>
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btn_upgrade_premium"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Upgrade"
+                            android:textSize="12sp"
+                            android:backgroundTint="@color/brand_dark_green"
+                            android:textColor="@color/white"
+                            android:paddingHorizontal="16dp"/>
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- Security -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Security"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/brand_dark_green"
+                android:layout_marginBottom="8dp"
+                android:layout_marginStart="8dp"/>
+
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:cardBackgroundColor="@color/white"
+                android:layout_marginBottom="24dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:id="@+id/container_biometric"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="16dp"
+                        android:background="?android:attr/selectableItemBackground">
+                        
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@android:drawable/ic_lock_lock"
+                            app:tint="@color/text_secondary"
+                            android:layout_marginEnd="16dp"/>
+                        
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="App Lock (PIN / Biometric)"
+                            android:textSize="16sp"
+                            android:textColor="@color/text_primary"/>
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/switch_biometric"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"/>
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#F0F0F0"
+                        android:layout_marginHorizontal="16dp"/>
+
+                    <TextView
+                        android:id="@+id/btn_change_pin"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Set / Change PIN"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_primary"
+                        android:padding="16dp"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:drawableStart="@android:drawable/ic_menu_edit"
+                        android:drawablePadding="16dp"
+                        android:drawableTint="@color/brand_dark_green"
+                        android:gravity="center_vertical"/>
+                        
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#F0F0F0"
+                        android:layout_marginHorizontal="16dp"/>
+
+                    <LinearLayout
+                        android:id="@+id/container_privacy_mode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="16dp"
+                        android:background="?android:attr/selectableItemBackground">
+                        
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@android:drawable/ic_menu_view"
+                            app:tint="@color/text_secondary"
+                            android:layout_marginEnd="16dp"/>
+                        
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Privacy Mode (Hide amounts)"
+                            android:textSize="16sp"
+                            android:textColor="@color/text_primary"/>
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/switch_privacy_mode"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"/>
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
             <!-- Data Management -->
             <TextView
                 android:layout_width="wrap_content"
@@ -136,12 +312,32 @@
                         android:id="@+id/btn_export_data"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Export Data (CSV)"
+                        android:text="Export Data (CSV/PDF)"
                         android:textSize="16sp"
                         android:textColor="@color/text_primary"
                         android:padding="16dp"
                         android:background="?android:attr/selectableItemBackground"
                         android:drawableStart="@android:drawable/ic_menu_save"
+                        android:drawablePadding="16dp"
+                        android:drawableTint="@color/brand_secondary_green"
+                        android:gravity="center_vertical"/>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#F0F0F0"
+                        android:layout_marginHorizontal="16dp"/>
+
+                    <TextView
+                        android:id="@+id/btn_import_data"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Import Data (CSV)"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_primary"
+                        android:padding="16dp"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:drawableStart="@android:drawable/ic_menu_upload"
                         android:drawablePadding="16dp"
                         android:drawableTint="@color/brand_secondary_green"
                         android:gravity="center_vertical"/>

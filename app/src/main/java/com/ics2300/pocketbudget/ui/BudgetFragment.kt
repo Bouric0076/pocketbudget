@@ -38,9 +38,9 @@ class BudgetFragment : Fragment() {
         _binding = FragmentBudgetBinding.inflate(inflater, container, false)
         val root: View = binding.root
 
-        val adapter = BudgetAdapter { budgetItem ->
+        val adapter = BudgetAdapter({ budgetItem ->
             showSetBudgetDialog(budgetItem)
-        }
+        })
         binding.recyclerviewBudget.adapter = adapter
         binding.recyclerviewBudget.layoutManager = LinearLayoutManager(context)
 
@@ -51,7 +51,9 @@ class BudgetFragment : Fragment() {
                     categoryId = progress.categoryId,
                     categoryName = progress.categoryName,
                     spentAmount = progress.totalSpent,
-                    limitAmount = progress.budgetAmount
+                    limitAmount = progress.budgetAmount,
+                    iconName = progress.iconName,
+                    colorHex = progress.colorHex
                 )
             }
             adapter.submitList(budgetItems)

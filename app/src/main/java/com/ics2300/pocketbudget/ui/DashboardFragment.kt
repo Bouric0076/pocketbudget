@@ -27,6 +27,9 @@ import com.ics2300.pocketbudget.utils.TransactionGrouper
 
 import com.google.android.material.snackbar.Snackbar
 import com.ics2300.pocketbudget.ui.dashboard.SyncResult
+import com.ics2300.pocketbudget.utils.AnalyticsUtils
+import com.ics2300.pocketbudget.utils.SecurityUtils
+import java.util.Calendar
 
 class DashboardFragment : Fragment() {
 
@@ -65,6 +68,9 @@ class DashboardFragment : Fragment() {
         
         // Auto-check permissions to ensure SmsReceiver works
         checkPermissionsOnStart()
+        
+        // Update Privacy Eye State
+        updatePrivacyEyeState()
         
         // Observe Sync Status
         viewModel.syncStatus.observe(viewLifecycleOwner) { result ->
@@ -121,11 +127,7 @@ class DashboardFragment : Fragment() {
 
         // Observe Stats
         viewModel.dashboardStats.observe(viewLifecycleOwner) { stats ->
-            binding.textIncomeAmount.text = CurrencyFormatter.formatKsh(stats.totalIncome)
-            binding.textExpenseAmount.text = CurrencyFormatter.formatKsh(stats.totalExpense)
-            
-            val netFlow = stats.totalIncome - stats.totalExpense
-            binding.textBalanceSummary.text = "Net: ${CurrencyFormatter.formatKsh(netFlow)}"
+            updateDashboardStats(stats)
         }
 
         return root
@@ -135,7 +137,88 @@ class DashboardFragment : Fragment() {
         binding.iconNotification.setOnClickListener {
             Toast.makeText(context, "No new notifications", Toast.LENGTH_SHORT).show()
         }
-        // Removed profile click listener as there are no user profiles
+        
+        binding.iconPrivacyEye.setOnClickListener {
+            val context = requireContext()
+            val isEnabled = SecurityUtils.isPrivacyModeEnabled(context)
+            SecurityUtils.setPrivacyModeEnabled(context, !isEnabled)
+            
+            updatePrivacyEyeState()
+            
+            // Refresh dashboard data to apply mask
+            // Trigger a refresh by re-setting time range or just observing again (automatically happens if LiveData updates)
+            // But formatting happens in observer, so we need to re-trigger the observer.
+            // The simplest way is to just call selectTimeRange again or notify adapter.
+            val currentRange = viewModel.dashboardStats.value
+            // We just need to refresh the UI elements that use CurrencyFormatter
+            // We can do this by forcing a re-bind of the current stats if available
+            viewModel.dashboardStats.value?.let { stats ->
+                updateDashboardStats(stats)
+            }
+            
+            // Also refresh recycler view
+            binding.recyclerRecentTransactions.adapter?.notifyDataSetChanged()
+        }
+    }
+    
+    private fun updatePrivacyEyeState() {
+        val isPrivacyMode = SecurityUtils.isPrivacyModeEnabled(requireContext())
+        if (isPrivacyMode) {
+            binding.iconPrivacyEye.setImageResource(android.R.drawable.ic_menu_view) // Actually "view" usually means open eye, maybe use a closed eye icon if available
+            // Standard android icons: ic_menu_view is usually an eye. 
+            // Let's use ic_menu_view for "Visible" (Privacy OFF) and something else for "Hidden".
+            // Wait, if privacy mode is ON, we are HIDING data. So maybe show a "closed eye" or "crossed out eye".
+            // Since we don't have custom assets yet, let's tint it differently or use alpha.
+            binding.iconPrivacyEye.alpha = 0.5f
+            binding.iconPrivacyEye.setColorFilter(requireContext().getColor(R.color.text_secondary))
+        } else {
+            binding.iconPrivacyEye.setImageResource(android.R.drawable.ic_menu_view)
+            binding.iconPrivacyEye.alpha = 1.0f
+            binding.iconPrivacyEye.setColorFilter(requireContext().getColor(R.color.brand_light_green))
+        }
+    }
+
+    private fun updateDashboardStats(stats: com.ics2300.pocketbudget.ui.dashboard.DashboardStats) {
+        val context = requireContext()
+        val isPrivacy = SecurityUtils.isPrivacyModeEnabled(context)
+        binding.textIncomeAmount.text = CurrencyFormatter.formatKsh(stats.totalIncome, isPrivacy)
+        binding.textExpenseAmount.text = CurrencyFormatter.formatKsh(stats.totalExpense, isPrivacy)
+        
+        val netFlow = stats.totalIncome - stats.totalExpense
+        binding.textBalanceSummary.text = "Net: ${CurrencyFormatter.formatKsh(netFlow, isPrivacy)}"
+        
+        // Spending Velocity Indicator
+        val calendar = Calendar.getInstance()
+        val dayOfMonth = calendar.get(Calendar.DAY_OF_MONTH)
+        val totalDays = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+        
+        // Use income as a rough budget proxy if no budget set, or ideally fetch total budget
+        // For now, let's compare against income or a fixed target if budget unavailable
+        val estimatedBudget = if (stats.totalIncome > 0) stats.totalIncome else 30000.0 // Fallback
+        
+        val velocity = AnalyticsUtils.calculateVelocity(
+            stats.totalExpense, 
+            estimatedBudget, 
+            dayOfMonth, 
+            totalDays
+        )
+        
+        val velocityText = when(velocity) {
+            AnalyticsUtils.VelocityStatus.FAST -> "Spending Fast! \uD83D\uDD25"
+            AnalyticsUtils.VelocityStatus.SLOW -> "Saving Well \uD83D\uDC4D"
+            AnalyticsUtils.VelocityStatus.NORMAL -> "On Track \uD83C\uDFAF"
+        }
+        
+        val velocityColor = when(velocity) {
+            AnalyticsUtils.VelocityStatus.FAST -> ContextCompat.getColor(context, android.R.color.holo_red_light)
+            AnalyticsUtils.VelocityStatus.SLOW -> ContextCompat.getColor(context, R.color.brand_light_green)
+            AnalyticsUtils.VelocityStatus.NORMAL -> ContextCompat.getColor(context, android.R.color.white)
+        }
+        
+        // Append to balance summary or a new view
+        // Ideally we add a new TextView in layout, but for now append
+        binding.textBalanceSummary.append("\n$velocityText")
+        // binding.textBalanceSummary.setTextColor(velocityColor) // Don't change whole text color
     }
 
     private fun setupTimeRangeTabs() {

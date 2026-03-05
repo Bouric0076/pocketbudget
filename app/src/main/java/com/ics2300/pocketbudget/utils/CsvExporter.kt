@@ -16,8 +16,10 @@ object CsvExporter {
     suspend fun exportTransactions(context: Context, uri: Uri, transactions: List<TransactionEntity>): Result<Boolean> {
         return withContext(Dispatchers.IO) {
             try {
-                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    BufferedWriter(OutputStreamWriter(outputStream)).use { writer ->
+                val outputStream = context.contentResolver.openOutputStream(uri) ?: throw Exception("Could not open output stream for URI: $uri")
+
+                outputStream.use { stream ->
+                    BufferedWriter(OutputStreamWriter(stream)).use { writer ->
                         // Write Header
                         writer.write("ID,Date,Amount,Type,Party,Category\n")
 
@@ -25,20 +27,22 @@ object CsvExporter {
 
                         // Write Rows
                         for (t in transactions) {
-                            val line = buildString {
-                                append("${t.transactionId},")
-                                append("${dateFormat.format(Date(t.timestamp))},")
-                                append("${t.amount},")
-                                append("${escapeCsv(t.type)},")
-                                append("${escapeCsv(t.partyName)},")
-                                append("${t.categoryId ?: ""}\n")
-                            }
-                            writer.write(line)
+                            val line = StringBuilder()
+                            // Escape transaction ID as it might contain commas
+                            line.append("${escapeCsv(t.transactionId)},")
+                            line.append("${dateFormat.format(Date(t.timestamp))},")
+                            line.append("${t.amount},")
+                            line.append("${escapeCsv(t.type)},")
+                            line.append("${escapeCsv(t.partyName)},")
+                            line.append("${t.categoryId ?: ""}\n")
+                            
+                            writer.write(line.toString())
                         }
                     }
                 }
                 Result.success(true)
             } catch (e: Exception) {
+                e.printStackTrace()
                 Result.failure(e)
             }
         }
@@ -46,8 +50,8 @@ object CsvExporter {
 
     private fun escapeCsv(value: String): String {
         var result = value.replace("\"", "\"\"") // Escape double quotes
-        if (result.contains(",") || result.contains("\n")) {
-            result = "\"$result\"" // Wrap in quotes if contains comma
+        if (result.contains(",") || result.contains("\n") || result.contains("\"")) {
+            result = "\"$result\"" // Wrap in quotes if contains comma, newline or quotes
         }
         return result
     }

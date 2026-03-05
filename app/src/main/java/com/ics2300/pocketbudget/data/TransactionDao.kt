@@ -61,8 +61,8 @@ interface TransactionDao {
     @Query("SELECT * FROM categories WHERE id = :id")
     suspend fun getCategoryById(id: Int): CategoryEntity?
 
-    @Query("UPDATE categories SET name = :name, keywords = :keywords WHERE id = :id")
-    suspend fun updateCategory(id: Int, name: String, keywords: String)
+    @Query("UPDATE categories SET name = :name, keywords = :keywords, iconName = :iconName, colorHex = :colorHex WHERE id = :id")
+    suspend fun updateCategory(id: Int, name: String, keywords: String, iconName: String, colorHex: String)
 
     @Query("DELETE FROM categories WHERE id = :id")
     suspend fun deleteCategory(id: Int)
@@ -70,7 +70,7 @@ interface TransactionDao {
     @Query("SELECT * FROM categories")
     suspend fun getAllCategoriesList(): List<CategoryEntity>
 
-    @Query("SELECT c.name as categoryName, SUM(t.amount) as totalAmount FROM transactions t INNER JOIN categories c ON t.categoryId = c.id WHERE t.type NOT IN ('Received', 'Deposit') GROUP BY c.id ORDER BY totalAmount DESC")
+    @Query("SELECT c.name as categoryName, SUM(t.amount) as totalAmount, c.iconName, c.colorHex FROM transactions t INNER JOIN categories c ON t.categoryId = c.id WHERE t.type NOT IN ('Received', 'Deposit') GROUP BY c.id ORDER BY totalAmount DESC")
     fun getCategorySpending(): Flow<List<CategorySpending>>
 
     @Query("SELECT COUNT(*) FROM categories")
@@ -96,7 +96,9 @@ interface TransactionDao {
             COALESCE(SUM(CASE WHEN t.type NOT IN ('Received', 'Deposit') THEN t.amount ELSE 0 END), 0) as totalSpent,
             COALESCE(b.amount, 0) as budgetAmount,
             :month as month,
-            :year as year
+            :year as year,
+            c.iconName,
+            c.colorHex
         FROM categories c
         LEFT JOIN transactions t ON c.id = t.categoryId AND strftime('%m', t.timestamp / 1000, 'unixepoch') = printf('%02d', :month) AND strftime('%Y', t.timestamp / 1000, 'unixepoch') = printf('%d', :year)
         LEFT JOIN budgets b ON c.id = b.categoryId AND b.month = :month AND b.year = :year

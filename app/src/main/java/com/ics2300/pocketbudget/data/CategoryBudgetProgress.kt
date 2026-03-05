@@ -6,7 +6,9 @@ data class CategoryBudgetProgress(
     val totalSpent: Double,
     val budgetAmount: Double,
     val month: Int,
-    val year: Int
+    val year: Int,
+    val iconName: String = "ic_default",
+    val colorHex: String = "#0A3D2E"
 ) {
     val progress: Int
         get() = if (budgetAmount > 0) ((totalSpent / budgetAmount) * 100).toInt() else 0

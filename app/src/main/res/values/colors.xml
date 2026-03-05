@@ -39,4 +39,5 @@
     <color name="teal_700">#018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="brand_accent_orange">#FF9800</color>
 </resources>

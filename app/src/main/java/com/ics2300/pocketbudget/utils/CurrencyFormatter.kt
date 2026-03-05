@@ -6,7 +6,11 @@ import java.util.Locale
 
 object CurrencyFormatter {
     
-    fun formatKsh(amount: Double): String {
+    fun formatKsh(amount: Double, isPrivacyMode: Boolean = false): String {
+        if (isPrivacyMode) {
+            return "Ksh ****"
+        }
+
         // Use US locale for comma separation, but manual currency symbol
         val format = NumberFormat.getNumberInstance(Locale.US)
         

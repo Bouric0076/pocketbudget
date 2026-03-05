@@ -52,7 +52,7 @@ android {
     }
 
     installation {
-        timeOutInMs = 300000
+        timeOutInMs = 600000 // 10 minutes
     }
 }
 
@@ -81,6 +81,12 @@ dependencies {
 
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+    
+    // Biometric Authentication
+    implementation("androidx.biometric:biometric:1.1.0")
+
+    // Security Crypto
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

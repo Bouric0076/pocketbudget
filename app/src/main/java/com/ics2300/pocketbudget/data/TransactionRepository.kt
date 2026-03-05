@@ -1,5 +1,6 @@
 package com.ics2300.pocketbudget.data
 
+import android.content.Context
 import com.ics2300.pocketbudget.utils.MpesaParser
 import com.ics2300.pocketbudget.utils.SmsReader
 import kotlinx.coroutines.Dispatchers
@@ -7,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 
 class TransactionRepository(
+    private val context: Context,
     private val transactionDao: TransactionDao,
     private val smsReader: SmsReader
 ) {
@@ -103,7 +105,7 @@ class TransactionRepository(
     }
 
     suspend fun updateCategory(category: CategoryEntity) {
-        transactionDao.updateCategory(category.id, category.name, category.keywords)
+        transactionDao.updateCategory(category.id, category.name, category.keywords, category.iconName, category.colorHex)
     }
 
     suspend fun deleteCategory(categoryId: Int) {
@@ -121,7 +123,13 @@ class TransactionRepository(
         val categories = transactionDao.getAllCategoriesList()
         val categorizedTransaction = categorizeTransaction(transaction, categories)
         
-        transactionDao.insertTransaction(categorizedTransaction)
+        val result = transactionDao.insertTransaction(categorizedTransaction)
+        if (result == -1L) {
+            // Duplicate transaction found (based on unique transactionId)
+            // We return null or the transaction? 
+            // Returning null indicates "nothing new added"
+            return null
+        }
         return categorizedTransaction
     }
 
@@ -175,36 +183,68 @@ class TransactionRepository(
 
             val categories = transactionDao.getAllCategoriesList()
 
-            // 2. Read and parse SMS incrementally
-            // In a real app, store this in SharedPreferences
-            // For now, we will read everything but only insert new ones (Room ignores conflicts)
-            // Ideally: val lastSync = prefs.getLong("last_sync", 0)
-            // But since we rely on unique IDs, reading all is safe but slow. 
-            // Let's implement a simple memory-based optimization or just read all for now
-            // as we don't have access to SharedPrefs here easily without injection.
+            // 2. Read and parse SMS incrementally using SharedPreferences
+            val prefs = context.getSharedPreferences("pocketbudget_prefs", Context.MODE_PRIVATE)
+            val lastSyncTime = prefs.getLong("last_sms_sync_timestamp", 0L)
             
-            // However, SmsReader now supports filtering.
-            // Let's assume we want to scan all for robustness since we don't persist the cursor.
-            val messages = smsReader.readMpesaMessages(0L) 
+            // Read messages after the last sync timestamp
+            val messages = smsReader.readMpesaMessages(lastSyncTime) 
             
             var newCount = 0
-            for (msg in messages) {
-                val transaction = MpesaParser.parse(msg)
+            var maxTimestamp = lastSyncTime
+
+            for (smsData in messages) {
+                // Update max timestamp seen
+                if (smsData.date > maxTimestamp) {
+                    maxTimestamp = smsData.date
+                }
+
+                val transaction = MpesaParser.parse(smsData.body)
                 if (transaction != null) {
                     val categorized = categorizeTransaction(transaction, categories)
                     try {
-                        transactionDao.insertTransaction(categorized)
-                        // If we reach here, it might have been inserted (or ignored). 
-                        // Room's OnConflictStrategy.IGNORE returns -1L if ignored.
-                        // We can't easily count "new" without changing DAO to return Long.
-                        // For UI feedback, let's just count valid parsed messages.
-                        newCount++
+                        val result = transactionDao.insertTransaction(categorized)
+                        if (result != -1L) {
+                            newCount++
+                        }
                     } catch (e: Exception) {
                         // Ignore
                     }
                 }
             }
+
+            // Update the sync timestamp only if we processed messages
+            if (maxTimestamp > lastSyncTime) {
+                prefs.edit().putLong("last_sms_sync_timestamp", maxTimestamp).apply()
+            }
+            
             newCount
+        }
+    }
+
+    suspend fun importData(transactions: List<TransactionEntity>): Int {
+        return withContext(Dispatchers.IO) {
+            val categories = transactionDao.getAllCategoriesList()
+            var importedCount = 0
+            
+            for (t in transactions) {
+                // Try to categorize if missing
+                val transactionToInsert = if (t.categoryId == null) {
+                    categorizeTransaction(t, categories)
+                } else {
+                    t
+                }
+                
+                try {
+                    val result = transactionDao.insertTransaction(transactionToInsert)
+                    if (result != -1L) {
+                        importedCount++
+                    }
+                } catch (e: Exception) {
+                    // Ignore duplicates
+                }
+            }
+            importedCount
         }
     }
 

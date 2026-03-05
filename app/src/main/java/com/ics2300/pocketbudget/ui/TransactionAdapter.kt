@@ -14,6 +14,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import com.ics2300.pocketbudget.utils.SecurityUtils
+
 class TransactionAdapter(private val onTransactionClick: (TransactionEntity) -> Unit = {}) : ListAdapter<TransactionListItem, RecyclerView.ViewHolder>(TransactionDiffCallback()) {
 
     companion object {
@@ -59,7 +61,10 @@ class TransactionAdapter(private val onTransactionClick: (TransactionEntity) -> 
         fun bind(transaction: TransactionEntity) {
             binding.root.setOnClickListener { onClick(transaction) }
             binding.textPartyName.text = transaction.partyName
-            binding.textAmount.text = CurrencyFormatter.formatKsh(transaction.amount)
+            
+            // Respect Privacy Mode
+            val isPrivacyMode = SecurityUtils.isPrivacyModeEnabled(binding.root.context)
+            binding.textAmount.text = CurrencyFormatter.formatKsh(transaction.amount, isPrivacyMode)
             
             val sdf = SimpleDateFormat("dd/MM/yy HH:mm", Locale.getDefault())
             binding.textDate.text = sdf.format(Date(transaction.timestamp))

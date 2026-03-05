@@ -8,10 +8,16 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.databinding.ItemBudgetBinding
+import com.ics2300.pocketbudget.utils.AnalyticsUtils
+import java.util.Calendar
+
+import com.ics2300.pocketbudget.utils.CategoryUtils
 import com.ics2300.pocketbudget.utils.CurrencyFormatter
 
-class BudgetAdapter(private val onEditClick: (BudgetItem) -> Unit) : 
-    ListAdapter<BudgetItem, BudgetAdapter.BudgetViewHolder>(BudgetDiffCallback()) {
+class BudgetAdapter(
+    private val onEditClick: (BudgetItem) -> Unit,
+    private val onBudgetSet: (BudgetItem) -> Unit = {} // If we want to support setting budget from adapter
+) : ListAdapter<BudgetItem, BudgetAdapter.BudgetViewHolder>(BudgetDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BudgetViewHolder {
         val binding = ItemBudgetBinding.inflate(LayoutInflater.from(parent.context), parent, false)
@@ -31,42 +37,57 @@ class BudgetAdapter(private val onEditClick: (BudgetItem) -> Unit) :
             
             binding.textCategoryName.text = item.categoryName
             binding.textSpentAmount.text = CurrencyFormatter.formatKsh(item.spentAmount)
-            binding.textLimitAmount.text = CurrencyFormatter.formatKsh(item.limitAmount)
             
-            val remaining = item.limitAmount - item.spentAmount
-            binding.textRemainingCategory.text = if (remaining >= 0) {
-                "${CurrencyFormatter.formatKsh(remaining)} left"
+            if (item.limitAmount > 0) {
+                binding.textLimitAmount.text = "/ ${CurrencyFormatter.formatKsh(item.limitAmount)}"
+                
+                val percentage = ((item.spentAmount / item.limitAmount) * 100).toInt()
+                binding.textPercentage.text = "$percentage%"
+                binding.progressCategory.progress = percentage.coerceIn(0, 100)
+                
+                val remaining = item.limitAmount - item.spentAmount
+                if (remaining >= 0) {
+                    binding.textRemainingCategory.text = "${CurrencyFormatter.formatKsh(remaining)} left"
+                    binding.textRemainingCategory.setTextColor(CategoryUtils.getColor(item.colorHex))
+                    binding.textPercentage.setTextColor(CategoryUtils.getColor(item.colorHex))
+                    binding.progressCategory.progressTintList = android.content.res.ColorStateList.valueOf(CategoryUtils.getColor(item.colorHex))
+                } else {
+                    binding.textRemainingCategory.text = "Over by ${CurrencyFormatter.formatKsh(-remaining)}"
+                    binding.textRemainingCategory.setTextColor(ContextCompat.getColor(binding.root.context, android.R.color.holo_red_dark))
+                    binding.textPercentage.setTextColor(ContextCompat.getColor(binding.root.context, android.R.color.holo_red_dark))
+                    binding.progressCategory.progressTintList = ContextCompat.getColorStateList(binding.root.context, android.R.color.holo_red_dark)
+                }
+                
+                // Forecast Check
+                val calendar = Calendar.getInstance()
+                val day = calendar.get(Calendar.DAY_OF_MONTH)
+                val totalDays = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+                
+                val forecast = AnalyticsUtils.forecastEndOfMonth(item.spentAmount, day, totalDays, item.limitAmount)
+                
+                if (forecast.isOverBudget && remaining > 0) {
+                    // It's not over budget YET, but predicted to be
+                    binding.textForecastAlert.visibility = android.view.View.VISIBLE
+                    binding.textForecastAlert.text = "⚠️ On track to overspend by ${CurrencyFormatter.formatKsh(forecast.predictedTotal - item.limitAmount)}"
+                } else {
+                    binding.textForecastAlert.visibility = android.view.View.GONE
+                }
+
             } else {
-                "Over by ${CurrencyFormatter.formatKsh(-remaining)}"
+                // No Budget Set
+                binding.textLimitAmount.text = "/ No Limit"
+                binding.textPercentage.text = ""
+                binding.progressCategory.progress = 0
+                binding.textRemainingCategory.text = "Tap to set budget"
+                binding.textRemainingCategory.setTextColor(ContextCompat.getColor(binding.root.context, R.color.text_secondary))
+                binding.textForecastAlert.visibility = android.view.View.GONE
             }
             
-            val percentage = if (item.limitAmount > 0) {
-                ((item.spentAmount / item.limitAmount) * 100).toInt()
-            } else {
-                if (item.spentAmount > 0) 100 else 0
-            }
-            binding.textPercentage.text = "$percentage%"
-            binding.progressCategory.progress = percentage.coerceIn(0, 100)
-            
-            // Color logic
-            val context = binding.root.context
-            // If over 100% OR (limit is 0 and spent > 0)
-            if (percentage > 100 || (item.limitAmount == 0.0 && item.spentAmount > 0)) {
-                binding.textRemainingCategory.setTextColor(ContextCompat.getColor(context, android.R.color.holo_red_dark))
-                binding.textPercentage.setTextColor(ContextCompat.getColor(context, android.R.color.holo_red_dark))
-            } else {
-                binding.textRemainingCategory.setTextColor(ContextCompat.getColor(context, R.color.brand_secondary_green))
-                binding.textPercentage.setTextColor(ContextCompat.getColor(context, R.color.brand_dark_green))
-            }
-            
-            // Icon logic (Simple mapping for now)
-            val iconRes = when (item.categoryName.lowercase()) {
-                "food" -> android.R.drawable.ic_menu_my_calendar // Placeholder
-                "transport" -> android.R.drawable.ic_menu_directions
-                "shopping" -> android.R.drawable.ic_menu_gallery
-                else -> android.R.drawable.ic_menu_my_calendar
-            }
-            binding.imgCategoryIcon.setImageResource(iconRes)
+            // Icon logic
+            binding.imgCategoryIcon.setImageResource(CategoryUtils.getIconResId(item.iconName))
+            binding.imgCategoryIcon.setColorFilter(CategoryUtils.getColor(item.colorHex))
+            // Optional: set background tint if it's a shape
+            // binding.imgCategoryIcon.backgroundTintList = android.content.res.ColorStateList.valueOf(CategoryUtils.getColor(item.colorHex))
         }
     }
 

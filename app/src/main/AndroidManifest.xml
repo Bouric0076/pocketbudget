@@ -24,6 +24,14 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".utils.SnoozeReceiver" android:exported="false" />
+
+        <activity
+            android:name=".ui.AppLockActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Pocketbudget"
+            android:launchMode="singleTop" />
+
         <activity
             android:name=".ui.OnboardingActivity"
             android:exported="false"

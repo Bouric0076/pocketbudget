@@ -104,5 +104,17 @@
                 android:textStyle="bold"/>
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/text_forecast_alert"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚠️ On track to overspend"
+            android:textSize="12sp"
+            android:textColor="@color/brand_accent_orange"
+            android:layout_marginTop="8dp"
+            android:visibility="gone"
+            android:padding="4dp"
+            android:background="#1AEE7600"/>
+
     </LinearLayout>
 </androidx.cardview.widget.CardView>

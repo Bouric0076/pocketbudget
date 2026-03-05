@@ -36,6 +36,8 @@ import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
 import com.ics2300.pocketbudget.ui.theme.*
 import com.ics2300.pocketbudget.utils.CurrencyFormatter
 
+import com.ics2300.pocketbudget.utils.CategoryUtils
+
 @Composable
 fun AnalyticsScreen(
     viewModel: DashboardViewModel,
@@ -185,7 +187,9 @@ fun AnalyticsScreen(
                 CategoryItem(
                     name = item.categoryName,
                     amount = item.totalSpent,
-                    percentage = if (totalSpent > 0) (item.totalSpent / totalSpent).toFloat() else 0f
+                    percentage = if (totalSpent > 0) (item.totalSpent / totalSpent).toFloat() else 0f,
+                    iconRes = CategoryUtils.getIconResId(item.iconName),
+                    color = Color(CategoryUtils.getColor(item.colorHex))
                 )
             }
             
@@ -376,7 +380,9 @@ fun DonutChart(
 fun CategoryItem(
     name: String,
     amount: Double,
-    percentage: Float
+    percentage: Float,
+    iconRes: Int,
+    color: Color
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -390,18 +396,18 @@ fun CategoryItem(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon Placeholder
+            // Icon
             Box(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                    .background(color.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_category),
+                    painter = painterResource(id = iconRes),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = color
                 )
             }
             
@@ -422,7 +428,8 @@ fun CategoryItem(
                     Text(
                         text = CurrencyFormatter.formatKsh(amount),
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = color
                     )
                 }
                 
@@ -434,7 +441,7 @@ fun CategoryItem(
                         .fillMaxWidth()
                         .height(6.dp)
                         .clip(RoundedCornerShape(3.dp)),
-                    color = AnalyticsTeal,
+                    color = color,
                     trackColor = Color.LightGray.copy(alpha = 0.2f),
                 )
             }

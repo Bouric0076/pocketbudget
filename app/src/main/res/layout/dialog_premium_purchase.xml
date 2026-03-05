@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="300dp"
+    android:layout_height="wrap_content"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="8dp"
+    app:cardBackgroundColor="@android:color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal">
+
+        <ImageView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/ic_launcher_foreground"
+            app:tint="#D4E157" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Go Premium"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#0A3D2E"
+            android:layout_marginTop="16dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Unlock the full potential of PocketBudget"
+            android:gravity="center"
+            android:textColor="#757575"
+            android:layout_marginTop="8dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✓  PDF &amp; CSV Exports"
+                android:textColor="#0A3D2E"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"/>
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✓  Advanced Analytics"
+                android:textColor="#0A3D2E"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✓  Import Data (CSV)"
+                android:textColor="#0A3D2E"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✓  Cloud Backup (Coming Soon)"
+                android:textColor="#0A3D2E"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"/>
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btn_buy_premium"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Subscribe - Ksh 50/mo"
+            android:backgroundTint="#0A3D2E"
+            android:textColor="@android:color/white"
+            android:textAllCaps="false"
+            android:layout_marginBottom="16dp"/>
+
+        <TextView
+            android:id="@+id/text_cancel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No thanks, maybe later"
+            android:textColor="#757575"
+            android:textSize="14sp"/>
+
+    </LinearLayout>
+</androidx.cardview.widget.CardView>
