@@ -22,7 +22,7 @@ class TransactionRepository(
     suspend fun getTransactionsByDateRange(start: Long, end: Long): List<TransactionEntity> {
         return transactionDao.getTransactionsListByDateRange(start, end)
     }
-    
+
     val categorySpending: Flow<List<CategorySpending>> = transactionDao.getCategorySpending()
 
     fun getBudgetProgress(month: Int, year: Int): Flow<List<CategoryBudgetProgress>> {
@@ -38,7 +38,7 @@ class TransactionRepository(
         }
         transactionDao.insertBudget(budget)
     }
-    
+
     suspend fun updateTransactionCategory(transactionId: Int, categoryId: Int) {
         transactionDao.updateTransactionCategory(transactionId, categoryId)
     }
@@ -62,7 +62,7 @@ class TransactionRepository(
         withContext(Dispatchers.IO) {
             val currentTime = System.currentTimeMillis()
             val dueItems = transactionDao.getDueRecurringTransactions(currentTime)
-            
+
             for (item in dueItems) {
                 // 1. Create the transaction
                 val transaction = TransactionEntity(
@@ -73,21 +73,21 @@ class TransactionRepository(
                     timestamp = item.nextDueDate,
                     categoryId = item.categoryId
                 )
-                
+
                 try {
                     transactionDao.insertTransaction(transaction)
-                    
+
                     // 2. Update next due date
                     val calendar = java.util.Calendar.getInstance()
                     calendar.timeInMillis = item.nextDueDate
-                    
+
                     when (item.frequency) {
                         "Daily" -> calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
                         "Weekly" -> calendar.add(java.util.Calendar.WEEK_OF_YEAR, 1)
                         "Monthly" -> calendar.add(java.util.Calendar.MONTH, 1)
                         "Yearly" -> calendar.add(java.util.Calendar.YEAR, 1)
                     }
-                    
+
                     transactionDao.updateRecurringNextDueDate(item.id, calendar.timeInMillis)
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -123,14 +123,14 @@ class TransactionRepository(
 
     suspend fun processNewSms(body: String): TransactionEntity? {
         val transaction = MpesaParser.parse(body) ?: return null
-        
+
         val categories = transactionDao.getAllCategoriesList()
         val categorizedTransaction = categorizeTransaction(transaction, categories)
-        
+
         val result = transactionDao.insertTransaction(categorizedTransaction)
         if (result == -1L) {
             // Duplicate transaction found (based on unique transactionId)
-            // We return null or the transaction? 
+            // We return null or the transaction?
             // Returning null indicates "nothing new added"
             return null
         }
@@ -141,7 +141,7 @@ class TransactionRepository(
         var matchedCategoryId: Int? = null
         val party = transaction.partyName.uppercase()
         val type = transaction.type.uppercase()
-        
+
         for (cat in categories) {
             val keywords = cat.keywords.split(",")
             for (keyword in keywords) {
@@ -153,7 +153,7 @@ class TransactionRepository(
             }
             if (matchedCategoryId != null) break
         }
-        
+
         if (matchedCategoryId == null) {
             if (transaction.type == "Sent") {
                  matchedCategoryId = categories.find { it.name == "Transfer" }?.id
@@ -161,7 +161,7 @@ class TransactionRepository(
                  matchedCategoryId = categories.find { it.name == "Income" }?.id
             }
         }
-        
+
         return transaction.copy(categoryId = matchedCategoryId ?: 1) // Default to Uncategorized (ID 1 usually)
     }
 
@@ -190,10 +190,10 @@ class TransactionRepository(
             // 2. Read and parse SMS incrementally using SharedPreferences
             val prefs = context.getSharedPreferences("pocketbudget_prefs", Context.MODE_PRIVATE)
             val lastSyncTime = prefs.getLong("last_sms_sync_timestamp", 0L)
-            
+
             // Read messages after the last sync timestamp
-            val messages = smsReader.readMpesaMessages(lastSyncTime) 
-            
+            val messages = smsReader.readMpesaMessages(lastSyncTime)
+
             var newCount = 0
             var maxTimestamp = lastSyncTime
 
@@ -221,7 +221,76 @@ class TransactionRepository(
             if (maxTimestamp > lastSyncTime) {
                 prefs.edit().putLong("last_sms_sync_timestamp", maxTimestamp).apply()
             }
-            
+
+            newCount
+        }
+    }
+
+    /**
+     * Resync ALL M-Pesa SMS from the inbox (from the very beginning, timestamp = 0).
+     * Only inserts transactions that are missing from the database.
+     * Existing transactions are safely skipped via the unique transactionId constraint (INSERT OR IGNORE).
+     * Also updates last_sms_sync_timestamp if newer messages are found, keeping the
+     * incremental dashboard sync aligned.
+     */
+    suspend fun resyncAllTransactions(): Int {
+        return withContext(Dispatchers.IO) {
+            // 1. Ensure default categories exist
+            if (transactionDao.getCategoryCount() == 0) {
+                val defaults = listOf(
+                    CategoryEntity(name = "Food", keywords = "HOTEL,CAFE,RESTAURANT,JAVA,KFC,PIZZA,BURGER"),
+                    CategoryEntity(name = "Groceries", keywords = "SUPERMARKET,MART,NAIVAS,QUICKMART,CARREFOUR,CHANDARANA"),
+                    CategoryEntity(name = "Transport", keywords = "UBER,BOLT,MATATU,SHELL,TOTAL,RUBIS,PETROL,STATION"),
+                    CategoryEntity(name = "Utilities", keywords = "KPLC,TOKEN,ZUKU,SAFARICOM,AIRTEL,INTERNET,WIFI,POWER"),
+                    CategoryEntity(name = "Entertainment", keywords = "NETFLIX,CINEMA,MOVIE,DSTV,SHOWMAX"),
+                    CategoryEntity(name = "Shopping", keywords = "CLOTHING,MALL,FASHION,STORE,SHOP"),
+                    CategoryEntity(name = "Health", keywords = "HOSPITAL,CHEMIST,PHARMACY,DOCTOR,CLINIC"),
+                    CategoryEntity(name = "Rent", keywords = "RENT,LANDLORD,HOUSING"),
+                    CategoryEntity(name = "Education", keywords = "SCHOOL,COLLEGE,UNIVERSITY,FEES,TUITION"),
+                    CategoryEntity(name = "Transfer", keywords = "SENT"),
+                    CategoryEntity(name = "Income", keywords = "RECEIVED")
+                )
+                defaults.forEach { transactionDao.insertCategory(it) }
+            }
+
+            val categories = transactionDao.getAllCategoriesList()
+
+            // 2. Read ALL M-Pesa SMS from the very beginning (afterTimestamp = 0L)
+            val messages = smsReader.readMpesaMessages(0L)
+
+            var newCount = 0
+            var maxTimestamp = 0L
+
+            for (smsData in messages) {
+                // Track the latest timestamp found across all SMS
+                if (smsData.date > maxTimestamp) {
+                    maxTimestamp = smsData.date
+                }
+
+                val transaction = MpesaParser.parse(smsData.body)
+                if (transaction != null) {
+                    val categorized = categorizeTransaction(transaction, categories)
+                    try {
+                        // INSERT OR IGNORE: duplicates are silently skipped
+                        val result = transactionDao.insertTransaction(categorized)
+                        if (result != -1L) {
+                            newCount++ // Only counts genuinely new/missing transactions
+                        }
+                    } catch (e: Exception) {
+                        // Ignore individual failures; continue processing the rest
+                    }
+                }
+            }
+
+            // 3. Advance last_sms_sync_timestamp if resync found messages newer than what
+            //    the incremental sync had recorded. This prevents the dashboard sync from
+            //    re-scanning already-processed messages on its next run.
+            val prefs = context.getSharedPreferences("pocketbudget_prefs", Context.MODE_PRIVATE)
+            val lastSyncTime = prefs.getLong("last_sms_sync_timestamp", 0L)
+            if (maxTimestamp > lastSyncTime) {
+                prefs.edit().putLong("last_sms_sync_timestamp", maxTimestamp).apply()
+            }
+
             newCount
         }
     }
@@ -230,7 +299,7 @@ class TransactionRepository(
         return withContext(Dispatchers.IO) {
             val categories = transactionDao.getAllCategoriesList()
             var importedCount = 0
-            
+
             for (t in transactions) {
                 // Try to categorize if missing
                 val transactionToInsert = if (t.categoryId == null) {
@@ -238,7 +307,7 @@ class TransactionRepository(
                 } else {
                     t
                 }
-                
+
                 try {
                     val result = transactionDao.insertTransaction(transactionToInsert)
                     if (result != -1L) {

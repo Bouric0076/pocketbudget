@@ -32,14 +32,14 @@ class SettingsViewModel(private val repository: TransactionRepository) : ViewMod
                 // Get all transactions (this is a Flow, so we take the first emission)
                 val transactions = repository.allTransactions.first()
                 val categories = repository.getAllCategoriesList()
-                
+
                 // If the URI ends in .csv, export CSV, otherwise PDF
                 // Or since we create the intent, we know what we want.
                 // For now, let's just use the new PDF exporter if requested or separate methods.
-                // The user asked to "update/enhance", so let's default to PDF but maybe check file extension or mime type if possible, 
+                // The user asked to "update/enhance", so let's default to PDF but maybe check file extension or mime type if possible,
                 // but simpler to just add a new method.
-                
-                // For backward compatibility or clarity, let's just make this export CSV for now 
+
+                // For backward compatibility or clarity, let's just make this export CSV for now
                 // and add exportPdf separately, then call the right one from UI.
                 val result = CsvExporter.exportTransactions(context, uri, transactions)
                 if (result.isSuccess) {
@@ -57,19 +57,19 @@ class SettingsViewModel(private val repository: TransactionRepository) : ViewMod
         viewModelScope.launch {
             try {
                 var transactions = repository.allTransactions.first()
-                
+
                 // Filter if dates are provided
                 var reportPeriod = "All Time"
                 if (startDate != null && endDate != null) {
                     transactions = transactions.filter { it.timestamp in startDate..endDate }
-                    
+
                     val dateFormat = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
                     reportPeriod = "${dateFormat.format(java.util.Date(startDate))} - ${dateFormat.format(java.util.Date(endDate))}"
                 }
 
                 val categories = repository.getAllCategoriesList()
                 val result = PdfExporter.exportTransactionsToPdf(context, uri, transactions, categories, reportPeriod)
-                
+
                 if (result.isSuccess) {
                      android.widget.Toast.makeText(context, "PDF Export Successful", android.widget.Toast.LENGTH_SHORT).show()
                 } else {
@@ -131,14 +131,14 @@ class SettingsViewModel(private val repository: TransactionRepository) : ViewMod
         viewModelScope.launch {
             _syncStatus.value = SyncResult.Loading
             try {
-                val count = repository.syncTransactions()
+                val count = repository.resyncAllTransactions()
                 _syncStatus.value = SyncResult.Success(count)
             } catch (e: Exception) {
                 _syncStatus.value = SyncResult.Error(e.message)
             }
         }
     }
-    
+
     fun processMpesaSms(body: String, onResult: (com.ics2300.pocketbudget.data.TransactionEntity?) -> Unit) {
         viewModelScope.launch {
             val transaction = repository.processNewSms(body)
