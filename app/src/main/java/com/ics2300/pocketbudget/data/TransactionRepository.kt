@@ -54,6 +54,10 @@ class TransactionRepository(
         transactionDao.disableRecurringTransaction(id)
     }
 
+    suspend fun getUpcomingRecurringTransactions(start: Long, end: Long): List<RecurringTransactionEntity> {
+        return transactionDao.getUpcomingRecurringTransactions(start, end)
+    }
+
     suspend fun processDueRecurringTransactions() {
         withContext(Dispatchers.IO) {
             val currentTime = System.currentTimeMillis()

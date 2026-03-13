@@ -17,19 +17,21 @@ class BillReminderWorker(
         val repository = (applicationContext as MainApplication).repository
 
         try {
-            // Get last 6 months of transactions for better pattern matching
-            // For now, just getting all is fine or use date range query
-            val transactions = repository.allTransactions.first()
+            // Get explicit recurring bills due soon (next 3 days)
+            val calendar = java.util.Calendar.getInstance()
+            val start = calendar.timeInMillis
+            calendar.add(java.util.Calendar.DAY_OF_YEAR, 3)
+            val end = calendar.timeInMillis
             
-            val predictions = AnalyticsUtils.predictUpcomingBills(transactions)
-            
-            for (bill in predictions) {
-                // Determine days until
-                val diff = bill.dueDate - System.currentTimeMillis()
-                val daysUntil = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(diff).toInt()
+            // We only notify for explicitly set recurring transactions
+            // This avoids false positives from heuristic predictions
+            val explicitBills = repository.getUpcomingRecurringTransactions(start, end)
+
+            for (bill in explicitBills) {
+                val diff = bill.nextDueDate - System.currentTimeMillis()
+                val daysUntil = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(diff).toInt().coerceAtLeast(0)
                 
-                // Show notification
-                NotificationHelper.showBillReminder(applicationContext, bill.name, bill.amount, daysUntil)
+                NotificationHelper.showBillReminder(applicationContext, bill.description, bill.amount, daysUntil)
             }
             
             return Result.success()

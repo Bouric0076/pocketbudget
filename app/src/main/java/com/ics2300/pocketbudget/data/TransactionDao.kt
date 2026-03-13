@@ -45,6 +45,9 @@ interface TransactionDao {
     @Query("SELECT * FROM recurring_transactions WHERE isActive = 1 AND nextDueDate <= :currentTime")
     suspend fun getDueRecurringTransactions(currentTime: Long): List<RecurringTransactionEntity>
 
+    @Query("SELECT * FROM recurring_transactions WHERE isActive = 1 AND nextDueDate BETWEEN :startTime AND :endTime")
+    suspend fun getUpcomingRecurringTransactions(startTime: Long, endTime: Long): List<RecurringTransactionEntity>
+
     // Category Methods
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCategory(category: CategoryEntity): Long

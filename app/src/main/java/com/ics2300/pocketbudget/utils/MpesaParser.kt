@@ -31,9 +31,30 @@ object MpesaParser {
     // Example: PDS345 CONFIRMED. You have received Ksh500.00 from JANE DOE 0723456789 on 15/5/23 at 6:00 PM.
     private val RECEIVED_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*You\\s+have\\s+received\\s+Ksh([\\d,]+\\.\\d{2})\\s+from\\s+(.+?)\\s+on\\s+(\\d{1,2}/\\d{1,2}/\\d{2})\\s+at\\s+(\\d{1,2}:\\d{2}\\s+[AP]M)", Pattern.CASE_INSENSITIVE)
 
-    // 6. M-SHWARI / DEPOSIT (Transferred from ...)
+    // 6. M-SHWARI / KCB (Transferred from - Withdrawal from Savings)
     // Example: UBE6U6I0FD Confirmed.Ksh350.00 transferred from M-Shwari account on 14/2/26 at 2:42 PM.
-    private val MSHWARI_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*Ksh([\\d,]+\\.\\d{2})\\s+transferred\\s+from\\s+(.+?)\\s+on\\s+(\\d{1,2}/\\d{1,2}/\\d{2})\\s+at\\s+(\\d{1,2}:\\d{2}\\s+[AP]M)", Pattern.CASE_INSENSITIVE)
+    private val MSHWARI_WITHDRAW_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*Ksh([\\d,]+\\.\\d{2})\\s+transferred\\s+from\\s+(.+?)\\s+on\\s+(\\d{1,2}/\\d{1,2}/\\d{2})\\s+at\\s+(\\d{1,2}:\\d{2}\\s+[AP]M)", Pattern.CASE_INSENSITIVE)
+
+    // 7. M-SHWARI / KCB (Transferred to - Deposit to Savings)
+    // Example: UBE6U6I0FD Confirmed. Ksh500.00 transferred to M-Shwari account on 14/2/26 at 2:42 PM.
+    private val MSHWARI_DEPOSIT_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*Ksh([\\d,]+\\.\\d{2})\\s+transferred\\s+to\\s+(.+?)\\s+on\\s+(\\d{1,2}/\\d{1,2}/\\d{2})\\s+at\\s+(\\d{1,2}:\\d{2}\\s+[AP]M)", Pattern.CASE_INSENSITIVE)
+
+    // 8. AIRTIME PURCHASE
+    // Example: QWE12345 Confirmed. Ksh100.00 bought for 0712345678 on 15/5/23 at 5:30 PM.
+    private val AIRTIME_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*Ksh([\\d,]+\\.\\d{2})\\s+bought\\s+for\\s+(.+?)\\s+on\\s+(\\d{1,2}/\\d{1,2}/\\d{2})\\s+at\\s+(\\d{1,2}:\\d{2}\\s+[AP]M)", Pattern.CASE_INSENSITIVE)
+
+    // 9. FULIZA REPAYMENT
+    // Example: QWE12345 Confirmed. Ksh50.00 has been paid from your M-PESA account to your Fuliza M-PESA on 15/5/23 at 5:30 PM.
+    private val FULIZA_REPAYMENT_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*Ksh([\\d,]+\\.\\d{2})\\s+has\\s+been\\s+paid\\s+from\\s+your\\s+M-PESA\\s+account\\s+to\\s+(.+?)\\s+on\\s+(\\d{1,2}/\\d{1,2}/\\d{2})\\s+at\\s+(\\d{1,2}:\\d{2}\\s+[AP]M)", Pattern.CASE_INSENSITIVE)
+
+    // 10. FULIZA DISBURSEMENT (Loan)
+    // Example: QWE12345 Confirmed. Ksh100.00 has been paid from your Fuliza M-PESA for PAYBILL on 15/5/23 at 5:30 PM.
+    private val FULIZA_DISBURSEMENT_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*Ksh([\\d,]+\\.\\d{2})\\s+has\\s+been\\s+paid\\s+from\\s+your\\s+Fuliza\\s+M-PESA\\s+for\\s+(.+?)\\s+on\\s+(\\d{1,2}/\\d{1,2}/\\d{2})\\s+at\\s+(\\d{1,2}:\\d{2}\\s+[AP]M)", Pattern.CASE_INSENSITIVE)
+
+    // 11. REVERSAL
+    // Example: QWE12345 Confirmed. Reversal of transaction ABC12345 for Ksh1,000.00 has been successfully processed on 15/5/23 at 5:30 PM.
+    // Groups: 1=ID, 2=OriginalTx, 3=Amount, 4=Date, 5=Time
+    private val REVERSAL_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*Reversal\\s+of\\s+transaction\\s+(.+?)\\s+for\\s+Ksh([\\d,]+\\.\\d{2})\\s+has\\s+been\\s+successfully\\s+processed\\s+on\\s+(\\d{1,2}/\\d{1,2}/\\d{2})\\s+at\\s+(\\d{1,2}:\\d{2}\\s+[AP]M)", Pattern.CASE_INSENSITIVE)
 
     fun parse(body: String): TransactionEntity? {
         // Normalize space and fix common OCR/SMS issues
@@ -57,10 +78,42 @@ object MpesaParser {
         matcher = RECEIVED_PATTERN.matcher(normalizedBody)
         if (matcher.find()) return createTransaction(matcher, "Received")
 
-        matcher = MSHWARI_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Deposit")
+        matcher = MSHWARI_WITHDRAW_PATTERN.matcher(normalizedBody)
+        if (matcher.find()) return createTransaction(matcher, "Deposit") // Money IN from Savings
+
+        matcher = MSHWARI_DEPOSIT_PATTERN.matcher(normalizedBody)
+        if (matcher.find()) return createTransaction(matcher, "Savings") // Money OUT to Savings
+
+        matcher = AIRTIME_PATTERN.matcher(normalizedBody)
+        if (matcher.find()) return createTransaction(matcher, "Airtime")
+
+        matcher = FULIZA_REPAYMENT_PATTERN.matcher(normalizedBody)
+        if (matcher.find()) return createTransaction(matcher, "Fuliza Repayment")
+
+        matcher = FULIZA_DISBURSEMENT_PATTERN.matcher(normalizedBody)
+        if (matcher.find()) return createTransaction(matcher, "Fuliza Loan")
+
+        matcher = REVERSAL_PATTERN.matcher(normalizedBody)
+        if (matcher.find()) return createReversalTransaction(matcher)
 
         return null
+    }
+
+    private fun createReversalTransaction(matcher: java.util.regex.Matcher): TransactionEntity {
+        val id = matcher.group(1) ?: ""
+        val originalTx = matcher.group(2) ?: "Unknown"
+        val amountStr = matcher.group(3)?.replace(",", "") ?: "0.0"
+        val date = matcher.group(4) ?: ""
+        val time = matcher.group(5) ?: ""
+
+        return TransactionEntity(
+            transactionId = id,
+            amount = amountStr.toDouble(),
+            type = "Reversal",
+            partyName = "Reversal of $originalTx",
+            timestamp = parseDate(date, time),
+            categoryId = null
+        )
     }
 
     private fun createTransaction(matcher: java.util.regex.Matcher, type: String, hasAccount: Boolean = false): TransactionEntity {

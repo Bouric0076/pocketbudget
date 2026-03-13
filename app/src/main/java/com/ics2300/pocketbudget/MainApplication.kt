@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.room.Room
 import com.ics2300.pocketbudget.data.AppDatabase
 import com.ics2300.pocketbudget.data.TransactionRepository
+import com.ics2300.pocketbudget.data.NotificationRepository
 import com.ics2300.pocketbudget.utils.SmsReader
 
 import com.ics2300.pocketbudget.utils.NotificationHelper
@@ -50,12 +51,17 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
         ) 
     }
 
+    val notificationRepository by lazy {
+        NotificationRepository(database.notificationDao())
+    }
+
     override fun onCreate() {
         super.onCreate()
         NotificationHelper.createNotificationChannels(this)
         scheduleDailySummary()
         scheduleRecurringTaskCheck()
         scheduleBillReminders()
+        scheduleBudgetWatcher()
         
         registerActivityLifecycleCallbacks(this)
     }
@@ -176,6 +182,24 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
             "bill_reminders",
             ExistingPeriodicWorkPolicy.UPDATE, 
             billWorkRequest
+        )
+    }
+
+    private fun scheduleBudgetWatcher() {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true)
+            .build()
+            
+        // Check every 4 hours
+        val budgetWorkRequest = PeriodicWorkRequestBuilder<com.ics2300.pocketbudget.workers.BudgetWatcherWorker>(4, TimeUnit.HOURS)
+            .setConstraints(constraints)
+            .addTag("budget_watcher")
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "budget_watcher",
+            ExistingPeriodicWorkPolicy.UPDATE, 
+            budgetWorkRequest
         )
     }
 }

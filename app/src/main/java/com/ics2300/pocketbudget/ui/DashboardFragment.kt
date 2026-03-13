@@ -135,7 +135,7 @@ class DashboardFragment : Fragment() {
 
     private fun setupHeader() {
         binding.iconNotification.setOnClickListener {
-            Toast.makeText(context, "No new notifications", Toast.LENGTH_SHORT).show()
+            findNavController().navigate(R.id.notificationsFragment)
         }
         
         binding.iconPrivacyEye.setOnClickListener {

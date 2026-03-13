@@ -34,4 +34,10 @@
         android:name="com.ics2300.pocketbudget.ui.AnalyticsFragment"
         android:label="Analytics"
         tools:layout="@layout/fragment_analytics" />
+
+    <fragment
+        android:id="@+id/notificationsFragment"
+        android:name="com.ics2300.pocketbudget.ui.notifications.NotificationsFragment"
+        android:label="Notifications"
+        tools:layout="@layout/fragment_notifications_list" />
 </navigation>
