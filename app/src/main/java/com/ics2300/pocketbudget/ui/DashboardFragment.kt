@@ -18,7 +18,10 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.ics2300.pocketbudget.MainApplication
 import com.ics2300.pocketbudget.R
+import com.ics2300.pocketbudget.data.TransactionEntity
 import com.ics2300.pocketbudget.databinding.FragmentDashboardBinding
+import com.ics2300.pocketbudget.ui.dashboard.ActorSpendingAdapter
+import com.ics2300.pocketbudget.ui.dashboard.DashboardStats
 import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
 import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModelFactory
 import com.ics2300.pocketbudget.ui.dashboard.TimeRange
@@ -124,11 +127,15 @@ class DashboardFragment : Fragment() {
         setupTimeRangeTabs()
         setupQuickActions()
         setupRecentTransactions()
+        setupTopRecipients()
 
         // Observe Stats
         viewModel.dashboardStats.observe(viewLifecycleOwner) { stats ->
             updateDashboardStats(stats)
         }
+
+        // Observe Categories to ensure they are loaded for details view
+        viewModel.categories.observe(viewLifecycleOwner) { /* Ensure LiveData is active */ }
 
         return root
     }
@@ -156,8 +163,9 @@ class DashboardFragment : Fragment() {
                 updateDashboardStats(stats)
             }
             
-            // Also refresh recycler view
-            binding.recyclerRecentTransactions.adapter?.notifyDataSetChanged()
+            // Also refresh recycler views
+            (binding.recyclerRecentTransactions.adapter as? TransactionAdapter)?.notifyDataSetChanged()
+            (binding.recyclerTopRecipients.adapter as? ActorSpendingAdapter)?.setPrivacyMode(!isEnabled)
         }
     }
     
@@ -203,22 +211,18 @@ class DashboardFragment : Fragment() {
             totalDays
         )
         
-        val velocityText = when(velocity) {
-            AnalyticsUtils.VelocityStatus.FAST -> "Spending Fast! \uD83D\uDD25"
-            AnalyticsUtils.VelocityStatus.SLOW -> "Saving Well \uD83D\uDC4D"
-            AnalyticsUtils.VelocityStatus.NORMAL -> "On Track \uD83C\uDFAF"
-        }
-        
-        val velocityColor = when(velocity) {
-            AnalyticsUtils.VelocityStatus.FAST -> ContextCompat.getColor(context, android.R.color.holo_red_light)
-            AnalyticsUtils.VelocityStatus.SLOW -> ContextCompat.getColor(context, R.color.brand_light_green)
-            AnalyticsUtils.VelocityStatus.NORMAL -> ContextCompat.getColor(context, android.R.color.white)
+        val velocityText = if (netFlow < 0) {
+            "Overspending! \u26A0\uFE0F"
+        } else {
+            when(velocity) {
+                AnalyticsUtils.VelocityStatus.FAST -> "Spending Fast! \uD83D\uDD25"
+                AnalyticsUtils.VelocityStatus.SLOW -> "Saving Well \uD83D\uDC4D"
+                AnalyticsUtils.VelocityStatus.NORMAL -> "On Track \uD83C\uDFAF"
+            }
         }
         
         // Append to balance summary or a new view
-        // Ideally we add a new TextView in layout, but for now append
-        binding.textBalanceSummary.append("\n$velocityText")
-        // binding.textBalanceSummary.setTextColor(velocityColor) // Don't change whole text color
+        binding.textBalanceSummary.text = "Net: ${CurrencyFormatter.formatKsh(netFlow, isPrivacy)} \u2022 $velocityText"
     }
 
     private fun setupTimeRangeTabs() {
@@ -272,7 +276,9 @@ class DashboardFragment : Fragment() {
     }
 
     private fun setupRecentTransactions() {
-        val adapter = TransactionAdapter()
+        val adapter = TransactionAdapter { transaction ->
+            showTransactionDetails(transaction)
+        }
         binding.recyclerRecentTransactions.adapter = adapter
         binding.recyclerRecentTransactions.layoutManager = LinearLayoutManager(context)
         
@@ -299,6 +305,41 @@ class DashboardFragment : Fragment() {
         binding.btnSeeAll.setOnClickListener {
             // Navigate to transactions tab? For now just toast
             Toast.makeText(context, "View all in Transactions Tab", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showTransactionDetails(transaction: TransactionEntity) {
+        val categories = viewModel.categories.value
+        val categoryName = categories?.find { it.id == transaction.categoryId }?.name 
+            ?: if (categories == null) "Loading..." else "Uncategorized"
+            
+        val bottomSheet = TransactionDetailsBottomSheet(transaction, categoryName) {
+            showCategorySelectionDialog(transaction)
+        }
+        bottomSheet.show(parentFragmentManager, TransactionDetailsBottomSheet.TAG)
+    }
+
+    private fun showCategorySelectionDialog(transaction: TransactionEntity) {
+        val categories = viewModel.categories.value ?: return
+        
+        val bottomSheet = CategorySelectionBottomSheet(
+            categories,
+            transaction.categoryId ?: -1
+        ) { selectedCategory ->
+            viewModel.updateTransactionCategory(transaction.id, selectedCategory.id)
+        }
+        bottomSheet.show(parentFragmentManager, CategorySelectionBottomSheet.TAG)
+    }
+
+    private fun setupTopRecipients() {
+        val isPrivacy = SecurityUtils.isPrivacyModeEnabled(requireContext())
+        val adapter = ActorSpendingAdapter(isPrivacy)
+        binding.recyclerTopRecipients.adapter = adapter
+        binding.recyclerTopRecipients.layoutManager = LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false)
+        
+        viewModel.topSpendingActors.observe(viewLifecycleOwner) { actors ->
+            binding.layoutTopRecipients.visibility = if (actors.isEmpty()) View.GONE else View.VISIBLE
+            adapter.submitList(actors)
         }
     }
 

@@ -37,7 +37,7 @@ class SmsReceiver : BroadcastReceiver() {
                             sender.equals("MPESA", ignoreCase = true)
                         )) {
                             Log.d("SmsReceiver", "Processing M-Pesa SMS: $body")
-                            val transaction = repository.processNewSms(body)
+                            val transaction = repository.processNewSms(body, msg.timestampMillis)
                             
                             if (transaction != null) {
                                 Log.d("SmsReceiver", "Transaction parsed: ${transaction.transactionId}")

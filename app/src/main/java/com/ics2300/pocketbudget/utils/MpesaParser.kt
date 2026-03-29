@@ -56,47 +56,151 @@ object MpesaParser {
     // Groups: 1=ID, 2=OriginalTx, 3=Amount, 4=Date, 5=Time
     private val REVERSAL_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*Reversal\\s+of\\s+transaction\\s+(.+?)\\s+for\\s+Ksh([\\d,]+\\.\\d{2})\\s+has\\s+been\\s+successfully\\s+processed\\s+on\\s+(\\d{1,2}/\\d{1,2}/\\d{2})\\s+at\\s+(\\d{1,2}:\\d{2}\\s+[AP]M)", Pattern.CASE_INSENSITIVE)
 
-    fun parse(body: String): TransactionEntity? {
+    // 12. REVERSAL (New Format)
+    // Example: UA26UGIL70 confirmed. Reversal of transaction UA26U2IPRD has been completed successfully on 2/1/26 at 11:11 AM and Ksh50.00 has been credited to your M-Pesa Account.
+    private val REVERSAL_NEW_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+confirmed\\.\\s*Reversal\\s+of\\s+transaction\\s+([A-Z0-9]+)\\s+has\\s+been\\s+completed\\s+successfully\\s+on\\s+(\\d{1,2}/\\d{1,2}/\\d{2})\\s+at\\s+(\\d{1,2}:\\d{2}\\s+[AP]M)\\s+and\\s+Ksh\\s*([\\d,]+\\.\\d{2})\\s+has\\s+been\\s+credited", Pattern.CASE_INSENSITIVE)
+
+    // 13. FULIZA OUTSTANDING PAYMENT (New Format)
+    // Example: UCJOY9JZVM Confirmed. Ksh 1792.45 from your M-PESA has been used to fully pay your outstanding Fuliza M-PESA.
+    private val FULIZA_REPAYMENT_NEW_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*Ksh\\s*([\\d,]+\\.\\d{2})\\s+from\\s+your\\s+M-PESA\\s+has\\s+been\\s+used\\s+to\\s+fully\\s+pay\\s+your\\s+outstanding\\s+Fuliza\\s+M-PESA", Pattern.CASE_INSENSITIVE)
+
+    // 14. FULIZA DISBURSEMENT (New Format)
+    // Example: UCJOY9KJBO Confirmed. Fuliza M-PESA amount is Ksh 1165.45.
+    private val FULIZA_DISBURSEMENT_NEW_PATTERN = Pattern.compile("([A-Z0-9]+)\\s+Confirmed\\.\\s*Fuliza\\s+M-PESA\\s+amount\\s+is\\s+Ksh\\s*([\\d,]+\\.\\d{2})", Pattern.CASE_INSENSITIVE)
+
+    // Generic extraction for balance and cost
+    private val BALANCE_PATTERN = Pattern.compile("balance\\s+is\\s+Ksh\\s*([\\d,]+\\.\\d{2})", Pattern.CASE_INSENSITIVE)
+    private val COST_PATTERN = Pattern.compile("cost,\\s*Ksh\\s*([\\d,]+\\.\\d{2})", Pattern.CASE_INSENSITIVE)
+
+    fun parse(body: String, smsTimestamp: Long = System.currentTimeMillis()): TransactionEntity? {
         // Normalize space and fix common OCR/SMS issues
         var normalizedBody = body.replace("\\s+".toRegex(), " ")
         normalizedBody = normalizedBody.replace("Confirmed\\.(\\S)".toRegex(RegexOption.IGNORE_CASE), "Confirmed. $1")
 
         // Try matching patterns in order of specificity
+        var transaction: TransactionEntity? = null
         
         var matcher = PAYBILL_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Paybill", hasAccount = true)
+        if (matcher.find()) {
+            transaction = createTransaction(matcher, "Paybill", hasAccount = true)
+        } else {
+            matcher = BUY_GOODS_PATTERN.matcher(normalizedBody)
+            if (matcher.find()) {
+                transaction = createTransaction(matcher, "Buy Goods")
+            } else {
+                matcher = WITHDRAW_PATTERN.matcher(normalizedBody)
+                if (matcher.find()) {
+                    transaction = createTransaction(matcher, "Withdraw")
+                } else {
+                    matcher = SENT_PATTERN.matcher(normalizedBody)
+                    if (matcher.find()) {
+                        transaction = createTransaction(matcher, "Sent")
+                    } else {
+                        matcher = RECEIVED_PATTERN.matcher(normalizedBody)
+                        if (matcher.find()) {
+                            transaction = createTransaction(matcher, "Received")
+                        } else {
+                            matcher = MSHWARI_WITHDRAW_PATTERN.matcher(normalizedBody)
+                            if (matcher.find()) {
+                                transaction = createTransaction(matcher, "Deposit")
+                            } else {
+                                matcher = MSHWARI_DEPOSIT_PATTERN.matcher(normalizedBody)
+                                if (matcher.find()) {
+                                    transaction = createTransaction(matcher, "Savings")
+                                } else {
+                                    matcher = AIRTIME_PATTERN.matcher(normalizedBody)
+                                    if (matcher.find()) {
+                                        transaction = createTransaction(matcher, "Airtime")
+                                    } else {
+                                        matcher = FULIZA_REPAYMENT_PATTERN.matcher(normalizedBody)
+                                        if (matcher.find()) {
+                                            transaction = createTransaction(matcher, "Fuliza Repayment")
+                                        } else {
+                                            matcher = FULIZA_REPAYMENT_NEW_PATTERN.matcher(normalizedBody)
+                                            if (matcher.find()) {
+                                                transaction = createFulizaTransaction(matcher, "Fuliza Repayment", smsTimestamp)
+                                            } else {
+                                                matcher = FULIZA_DISBURSEMENT_PATTERN.matcher(normalizedBody)
+                                                if (matcher.find()) {
+                                                    transaction = createTransaction(matcher, "Fuliza Loan")
+                                                } else {
+                                                    matcher = FULIZA_DISBURSEMENT_NEW_PATTERN.matcher(normalizedBody)
+                                                    if (matcher.find()) {
+                                                        transaction = createFulizaTransaction(matcher, "Fuliza Loan", smsTimestamp)
+                                                    } else {
+                                                        matcher = REVERSAL_PATTERN.matcher(normalizedBody)
+                                                        if (matcher.find()) {
+                                                            transaction = createReversalTransaction(matcher)
+                                                        } else {
+                                                            matcher = REVERSAL_NEW_PATTERN.matcher(normalizedBody)
+                                                            if (matcher.find()) {
+                                                                transaction = createReversalNewTransaction(matcher)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-        matcher = BUY_GOODS_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Buy Goods")
+        if (transaction != null) {
+            // Extract balance and cost from the whole body
+            val balanceMatcher = BALANCE_PATTERN.matcher(normalizedBody)
+            val balanceAfter = if (balanceMatcher.find()) {
+                balanceMatcher.group(1)?.replace(",", "")?.toDoubleOrNull()
+            } else null
 
-        matcher = WITHDRAW_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Withdraw")
+            val costMatcher = COST_PATTERN.matcher(normalizedBody)
+            val transactionCost = if (costMatcher.find()) {
+                costMatcher.group(1)?.replace(",", "")?.toDoubleOrNull()
+            } else null
 
-        matcher = SENT_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Sent")
-
-        matcher = RECEIVED_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Received")
-
-        matcher = MSHWARI_WITHDRAW_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Deposit") // Money IN from Savings
-
-        matcher = MSHWARI_DEPOSIT_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Savings") // Money OUT to Savings
-
-        matcher = AIRTIME_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Airtime")
-
-        matcher = FULIZA_REPAYMENT_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Fuliza Repayment")
-
-        matcher = FULIZA_DISBURSEMENT_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createTransaction(matcher, "Fuliza Loan")
-
-        matcher = REVERSAL_PATTERN.matcher(normalizedBody)
-        if (matcher.find()) return createReversalTransaction(matcher)
+            return transaction.copy(
+                balanceAfter = balanceAfter,
+                transactionCost = transactionCost,
+                fullSmsBody = body
+            )
+        }
 
         return null
+    }
+
+    private fun createFulizaTransaction(matcher: java.util.regex.Matcher, type: String, smsTimestamp: Long): TransactionEntity {
+        val id = matcher.group(1) ?: ""
+        val amountStr = matcher.group(2)?.replace(",", "") ?: "0.0"
+
+        return TransactionEntity(
+            transactionId = id,
+            amount = amountStr.toDouble(),
+            type = type,
+            partyName = "Fuliza M-PESA",
+            timestamp = smsTimestamp,
+            categoryId = null
+        )
+    }
+
+    private fun createReversalNewTransaction(matcher: java.util.regex.Matcher): TransactionEntity {
+        val id = matcher.group(1) ?: ""
+        val originalTx = matcher.group(2) ?: "Unknown"
+        val date = matcher.group(3) ?: ""
+        val time = matcher.group(4) ?: ""
+        val amountStr = matcher.group(5)?.replace(",", "") ?: "0.0"
+
+        return TransactionEntity(
+            transactionId = id,
+            amount = amountStr.toDouble(),
+            type = "Reversal",
+            partyName = "Reversal of $originalTx",
+            timestamp = parseDate(date, time),
+            categoryId = null
+        )
     }
 
     private fun createReversalTransaction(matcher: java.util.regex.Matcher): TransactionEntity {

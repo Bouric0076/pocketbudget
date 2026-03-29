@@ -15,5 +15,8 @@ data class TransactionEntity(
     val type: String, // Sent, Received, etc.
     val partyName: String,
     val timestamp: Long,
-    val categoryId: Int?
+    val categoryId: Int?,
+    val balanceAfter: Double? = null,
+    val transactionCost: Double? = null,
+    val fullSmsBody: String? = null
 )

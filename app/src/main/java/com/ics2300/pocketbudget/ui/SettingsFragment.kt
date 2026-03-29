@@ -362,6 +362,9 @@ class SettingsFragment : Fragment() {
             }
         }
 
+        // Observe Categories to ensure they are loaded for the management dialog
+        viewModel.categories.observe(viewLifecycleOwner) { /* Keep LiveData active */ }
+
         return root
     }
 

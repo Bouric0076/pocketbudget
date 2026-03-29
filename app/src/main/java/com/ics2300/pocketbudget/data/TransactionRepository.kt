@@ -14,6 +14,7 @@ class TransactionRepository(
 ) {
 
     val allTransactions: Flow<List<TransactionEntity>> = transactionDao.getAllTransactions()
+    val allCategories: Flow<List<CategoryEntity>> = transactionDao.getAllCategories()
 
     fun searchTransactions(query: String): Flow<List<TransactionEntity>> {
         return transactionDao.searchTransactions(query)
@@ -29,6 +30,14 @@ class TransactionRepository(
         return transactionDao.getCategoryBudgetProgress(month, year)
     }
 
+    fun getTopSpendingActors(limit: Int = 5): Flow<List<ActorSpending>> {
+        return transactionDao.getTopSpendingActors(limit)
+    }
+
+    fun getTopSpendingActorsByDate(limit: Int = 5, start: Long, end: Long): Flow<List<ActorSpending>> {
+        return transactionDao.getTopSpendingActorsByDate(limit, start, end)
+    }
+
     suspend fun setBudget(categoryId: Int, amount: Double, month: Int, year: Int) {
         val existing = transactionDao.getBudgetForCategory(categoryId, month, year)
         val budget = if (existing != null) {
@@ -40,7 +49,18 @@ class TransactionRepository(
     }
 
     suspend fun updateTransactionCategory(transactionId: Int, categoryId: Int) {
-        transactionDao.updateTransactionCategory(transactionId, categoryId)
+        withContext(Dispatchers.IO) {
+            transactionDao.updateTransactionCategory(transactionId, categoryId)
+            
+            // Learn from this edit!
+            val transaction = transactionDao.getTransactionById(transactionId)
+            if (transaction != null) {
+                val normalizedParty = transaction.partyName.trim().uppercase()
+                if (normalizedParty.isNotEmpty()) {
+                    transactionDao.insertActorMapping(ActorCategoryMapping(normalizedParty, categoryId))
+                }
+            }
+        }
     }
 
     // Recurring Transaction Methods
@@ -100,10 +120,6 @@ class TransactionRepository(
         return transactionDao.getAllCategoriesList()
     }
 
-    fun getAllCategories(): Flow<List<CategoryEntity>> {
-        return transactionDao.getAllCategories()
-    }
-
     suspend fun addCategory(category: CategoryEntity) {
         transactionDao.insertCategory(category)
     }
@@ -121,8 +137,8 @@ class TransactionRepository(
         transactionDao.deleteAllBudgets()
     }
 
-    suspend fun processNewSms(body: String): TransactionEntity? {
-        val transaction = MpesaParser.parse(body) ?: return null
+    suspend fun processNewSms(body: String, timestamp: Long = System.currentTimeMillis()): TransactionEntity? {
+        val transaction = MpesaParser.parse(body, timestamp) ?: return null
 
         val categories = transactionDao.getAllCategoriesList()
         val categorizedTransaction = categorizeTransaction(transaction, categories)
@@ -137,21 +153,28 @@ class TransactionRepository(
         return categorizedTransaction
     }
 
-    private fun categorizeTransaction(transaction: TransactionEntity, categories: List<CategoryEntity>): TransactionEntity {
+    private suspend fun categorizeTransaction(transaction: TransactionEntity, categories: List<CategoryEntity>): TransactionEntity {
         var matchedCategoryId: Int? = null
-        val party = transaction.partyName.uppercase()
+        val party = transaction.partyName.trim().uppercase()
         val type = transaction.type.uppercase()
 
-        for (cat in categories) {
-            val keywords = cat.keywords.split(",")
-            for (keyword in keywords) {
-                val kw = keyword.trim().uppercase()
-                if (kw.isNotEmpty() && (party.contains(kw) || type.contains(kw))) {
-                    matchedCategoryId = cat.id
-                    break
+        // 0. Check for learned mappings first (highest priority)
+        if (party.isNotEmpty()) {
+            matchedCategoryId = transactionDao.getCategoryIdForActor(party)
+        }
+
+        if (matchedCategoryId == null) {
+            for (cat in categories) {
+                val keywords = cat.keywords.split(",")
+                for (keyword in keywords) {
+                    val kw = keyword.trim().uppercase()
+                    if (kw.isNotEmpty() && (party.contains(kw) || type.contains(kw))) {
+                        matchedCategoryId = cat.id
+                        break
+                    }
                 }
+                if (matchedCategoryId != null) break
             }
-            if (matchedCategoryId != null) break
         }
 
         if (matchedCategoryId == null) {
@@ -162,7 +185,12 @@ class TransactionRepository(
             }
         }
 
-        return transaction.copy(categoryId = matchedCategoryId ?: 1) // Default to Uncategorized (ID 1 usually)
+        // If still null, default to "Uncategorized" category ID
+        if (matchedCategoryId == null) {
+            matchedCategoryId = categories.find { it.name == "Uncategorized" }?.id
+        }
+
+        return transaction.copy(categoryId = matchedCategoryId ?: 1)
     }
 
     suspend fun syncTransactions(): Int {
@@ -170,19 +198,26 @@ class TransactionRepository(
             // 1. Ensure categories exist
             if (transactionDao.getCategoryCount() == 0) {
                 val defaults = listOf(
-                    CategoryEntity(name = "Food", keywords = "HOTEL,CAFE,RESTAURANT,JAVA,KFC,PIZZA,BURGER"),
-                    CategoryEntity(name = "Groceries", keywords = "SUPERMARKET,MART,NAIVAS,QUICKMART,CARREFOUR,CHANDARANA"),
-                    CategoryEntity(name = "Transport", keywords = "UBER,BOLT,MATATU,SHELL,TOTAL,RUBIS,PETROL,STATION"),
-                    CategoryEntity(name = "Utilities", keywords = "KPLC,TOKEN,ZUKU,SAFARICOM,AIRTEL,INTERNET,WIFI,POWER"),
-                    CategoryEntity(name = "Entertainment", keywords = "NETFLIX,CINEMA,MOVIE,DSTV,SHOWMAX"),
-                    CategoryEntity(name = "Shopping", keywords = "CLOTHING,MALL,FASHION,STORE,SHOP"),
-                    CategoryEntity(name = "Health", keywords = "HOSPITAL,CHEMIST,PHARMACY,DOCTOR,CLINIC"),
-                    CategoryEntity(name = "Rent", keywords = "RENT,LANDLORD,HOUSING"),
-                    CategoryEntity(name = "Education", keywords = "SCHOOL,COLLEGE,UNIVERSITY,FEES,TUITION"),
-                    CategoryEntity(name = "Transfer", keywords = "SENT"),
-                    CategoryEntity(name = "Income", keywords = "RECEIVED")
+                    CategoryEntity(name = "Uncategorized", keywords = "UNCATEGORIZED"),
+                    CategoryEntity(name = "Food", keywords = "HOTEL,CAFE,RESTAURANT,JAVA,KFC,PIZZA,BURGER,CHICKEN,INN,GALITOS,PIZZA INN,CREAMY INN"),
+                    CategoryEntity(name = "Groceries", keywords = "SUPERMARKET,MART,NAIVAS,QUICKMART,CARREFOUR,CHANDARANA,TUSKYS,UCHUMI,SHOPRITE,GLACIER"),
+                    CategoryEntity(name = "Transport", keywords = "UBER,BOLT,MATATU,SHELL,TOTAL,RUBIS,PETROL,STATION,GAS,FARAS,LITTLE CAB,EASY COACH,MASH,DREAMLINE"),
+                    CategoryEntity(name = "Utilities", keywords = "KPLC,TOKEN,ZUKU,SAFARICOM,AIRTEL,INTERNET,WIFI,POWER,TELKOM,FAIBA,LIQUID,DSTV,GOTV,STARTIMES"),
+                    CategoryEntity(name = "Entertainment", keywords = "NETFLIX,CINEMA,MOVIE,SHOWMAX,SPOTIFY,YOUTUBE,BET,GAMING,XBOX,PLAYSTATION"),
+                    CategoryEntity(name = "Shopping", keywords = "CLOTHING,MALL,FASHION,STORE,SHOP,JUMIA,KILIMALL,AMAZON,SHEIN,ALIBABA,ALIEXPRESS,ADIDAS,NIKE"),
+                    CategoryEntity(name = "Health", keywords = "HOSPITAL,CHEMIST,PHARMACY,DOCTOR,CLINIC,MEDIC,DENTAL,OPTICAL,NHIF,SHA,AAR,OLD MUTUAL"),
+                    CategoryEntity(name = "Rent", keywords = "RENT,LANDLORD,HOUSING,ESTATE,APARTMENT,REALTY"),
+                    CategoryEntity(name = "Education", keywords = "SCHOOL,COLLEGE,UNIVERSITY,FEES,TUITION,ACADEMY,KINDERGARTEN,UDEMY,COURSERA"),
+                    CategoryEntity(name = "Transfer", keywords = "SENT,TRANSFER,MPESA,POCHI,LA BIASHARA,TILL,PAYBILL"),
+                    CategoryEntity(name = "Income", keywords = "RECEIVED,DEPOSIT,SALARY,DIVIDEND,INTEREST,REFUND")
                 )
                 defaults.forEach { transactionDao.insertCategory(it) }
+            } else {
+                // Ensure "Uncategorized" exists for existing users
+                val allCats = transactionDao.getAllCategoriesList()
+                if (allCats.none { it.name.equals("Uncategorized", ignoreCase = true) }) {
+                    transactionDao.insertCategory(CategoryEntity(name = "Uncategorized", keywords = "UNCATEGORIZED"))
+                }
             }
 
             val categories = transactionDao.getAllCategoriesList()
@@ -203,8 +238,9 @@ class TransactionRepository(
                     maxTimestamp = smsData.date
                 }
 
-                val transaction = MpesaParser.parse(smsData.body)
+                val transaction = MpesaParser.parse(smsData.body, smsData.date)
                 if (transaction != null) {
+                    // Pre-fill fullSmsBody for old transactions if needed
                     val categorized = categorizeTransaction(transaction, categories)
                     try {
                         val result = transactionDao.insertTransaction(categorized)
@@ -238,19 +274,26 @@ class TransactionRepository(
             // 1. Ensure default categories exist
             if (transactionDao.getCategoryCount() == 0) {
                 val defaults = listOf(
-                    CategoryEntity(name = "Food", keywords = "HOTEL,CAFE,RESTAURANT,JAVA,KFC,PIZZA,BURGER"),
-                    CategoryEntity(name = "Groceries", keywords = "SUPERMARKET,MART,NAIVAS,QUICKMART,CARREFOUR,CHANDARANA"),
-                    CategoryEntity(name = "Transport", keywords = "UBER,BOLT,MATATU,SHELL,TOTAL,RUBIS,PETROL,STATION"),
-                    CategoryEntity(name = "Utilities", keywords = "KPLC,TOKEN,ZUKU,SAFARICOM,AIRTEL,INTERNET,WIFI,POWER"),
-                    CategoryEntity(name = "Entertainment", keywords = "NETFLIX,CINEMA,MOVIE,DSTV,SHOWMAX"),
-                    CategoryEntity(name = "Shopping", keywords = "CLOTHING,MALL,FASHION,STORE,SHOP"),
-                    CategoryEntity(name = "Health", keywords = "HOSPITAL,CHEMIST,PHARMACY,DOCTOR,CLINIC"),
-                    CategoryEntity(name = "Rent", keywords = "RENT,LANDLORD,HOUSING"),
-                    CategoryEntity(name = "Education", keywords = "SCHOOL,COLLEGE,UNIVERSITY,FEES,TUITION"),
-                    CategoryEntity(name = "Transfer", keywords = "SENT"),
-                    CategoryEntity(name = "Income", keywords = "RECEIVED")
+                    CategoryEntity(name = "Uncategorized", keywords = "UNCATEGORIZED"),
+                    CategoryEntity(name = "Food", keywords = "HOTEL,CAFE,RESTAURANT,JAVA,KFC,PIZZA,BURGER,CHICKEN,INN,GALITOS,PIZZA INN,CREAMY INN"),
+                    CategoryEntity(name = "Groceries", keywords = "SUPERMARKET,MART,NAIVAS,QUICKMART,CARREFOUR,CHANDARANA,TUSKYS,UCHUMI,SHOPRITE,GLACIER"),
+                    CategoryEntity(name = "Transport", keywords = "UBER,BOLT,MATATU,SHELL,TOTAL,RUBIS,PETROL,STATION,GAS,FARAS,LITTLE CAB,EASY COACH,MASH,DREAMLINE"),
+                    CategoryEntity(name = "Utilities", keywords = "KPLC,TOKEN,ZUKU,SAFARICOM,AIRTEL,INTERNET,WIFI,POWER,TELKOM,FAIBA,LIQUID,DSTV,GOTV,STARTIMES"),
+                    CategoryEntity(name = "Entertainment", keywords = "NETFLIX,CINEMA,MOVIE,SHOWMAX,SPOTIFY,YOUTUBE,BET,GAMING,XBOX,PLAYSTATION"),
+                    CategoryEntity(name = "Shopping", keywords = "CLOTHING,MALL,FASHION,STORE,SHOP,JUMIA,KILIMALL,AMAZON,SHEIN,ALIBABA,ALIEXPRESS,ADIDAS,NIKE"),
+                    CategoryEntity(name = "Health", keywords = "HOSPITAL,CHEMIST,PHARMACY,DOCTOR,CLINIC,MEDIC,DENTAL,OPTICAL,NHIF,SHA,AAR,OLD MUTUAL"),
+                    CategoryEntity(name = "Rent", keywords = "RENT,LANDLORD,HOUSING,ESTATE,APARTMENT,REALTY"),
+                    CategoryEntity(name = "Education", keywords = "SCHOOL,COLLEGE,UNIVERSITY,FEES,TUITION,ACADEMY,KINDERGARTEN,UDEMY,COURSERA"),
+                    CategoryEntity(name = "Transfer", keywords = "SENT,TRANSFER,MPESA,POCHI,LA BIASHARA,TILL,PAYBILL"),
+                    CategoryEntity(name = "Income", keywords = "RECEIVED,DEPOSIT,SALARY,DIVIDEND,INTEREST,REFUND")
                 )
                 defaults.forEach { transactionDao.insertCategory(it) }
+            } else {
+                // Ensure "Uncategorized" exists for existing users
+                val allCats = transactionDao.getAllCategoriesList()
+                if (allCats.none { it.name.equals("Uncategorized", ignoreCase = true) }) {
+                    transactionDao.insertCategory(CategoryEntity(name = "Uncategorized", keywords = "UNCATEGORIZED"))
+                }
             }
 
             val categories = transactionDao.getAllCategoriesList()
@@ -267,7 +310,7 @@ class TransactionRepository(
                     maxTimestamp = smsData.date
                 }
 
-                val transaction = MpesaParser.parse(smsData.body)
+                val transaction = MpesaParser.parse(smsData.body, smsData.date)
                 if (transaction != null) {
                     val categorized = categorizeTransaction(transaction, categories)
                     try {

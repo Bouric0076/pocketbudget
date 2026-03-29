@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
+import com.ics2300.pocketbudget.data.ActorSpending
 import com.ics2300.pocketbudget.data.CategoryEntity
 import com.ics2300.pocketbudget.data.CategorySpending
 import com.ics2300.pocketbudget.data.TransactionEntity
@@ -95,8 +96,23 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
         }
     }
 
-    // For Transactions Fragment (Searchable + Filterable + Date Range)
+    // For Transactions Fragment (Searchable + Filterable + Date Range + Advanced)
     private val dateRangeFilter = MutableStateFlow<Pair<Long, Long>?>(null)
+    val minAmountFilter = MutableStateFlow<Double?>(null)
+    val maxAmountFilter = MutableStateFlow<Double?>(null)
+    val selectedActorFilter = MutableStateFlow<String?>(null)
+
+    fun setAdvancedFilters(min: Double?, max: Double?, actor: String?) {
+        minAmountFilter.value = min
+        maxAmountFilter.value = max
+        selectedActorFilter.value = actor
+    }
+
+    fun clearAdvancedFilters() {
+        minAmountFilter.value = null
+        maxAmountFilter.value = null
+        selectedActorFilter.value = null
+    }
 
     fun setDateRangeFilter(start: Long, end: Long) {
         dateRangeFilter.value = Pair(start, end)
@@ -107,11 +123,17 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
     }
 
     val allTransactions: LiveData<List<TransactionEntity>> = combine(
-        searchQuery,
-        filterType,
-        dateRangeFilter,
+        combine(searchQuery, filterType, dateRangeFilter) { query, filter, dateRange ->
+            Triple(query, filter, dateRange)
+        },
+        combine(minAmountFilter, maxAmountFilter, selectedActorFilter) { min, max, actor ->
+            Triple(min, max, actor)
+        },
         repository.allTransactions
-    ) { query, filter, dateRange, transactions ->
+    ) { basicFilters, advancedFilters, transactions ->
+        val (query, filter, dateRange) = basicFilters
+        val (minAmount, maxAmount, actor) = advancedFilters
+        
         var result = transactions
         
         // Apply Date Range
@@ -124,6 +146,17 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
             result = result.filter { 
                 it.partyName.contains(query, ignoreCase = true)
             }
+        }
+
+        // Apply Advanced Filters
+        if (minAmount != null) {
+            result = result.filter { it.amount >= minAmount }
+        }
+        if (maxAmount != null) {
+            result = result.filter { it.amount <= maxAmount }
+        }
+        if (actor != null && actor.isNotBlank()) {
+            result = result.filter { it.partyName.contains(actor, ignoreCase = true) }
         }
         
         // Apply Filter
@@ -172,6 +205,11 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
 
     val categorySpending: LiveData<List<CategorySpending>> = repository.categorySpending.asLiveData()
 
+    val topSpendingActors: LiveData<List<ActorSpending>> = timeRange.flatMapLatest { range ->
+        val (start, end) = getTimestampRange(range)
+        repository.getTopSpendingActorsByDate(5, start, end)
+    }.asLiveData()
+
     val dailySpending: LiveData<List<ChartData>> = repository.allTransactions.map { transactions ->
         // Group by day (last 7 days)
         val today = Calendar.getInstance()
@@ -201,8 +239,7 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
         }
     }.asLiveData()
 
-    private val _categories = MutableLiveData<List<CategoryEntity>>()
-    val categories: LiveData<List<CategoryEntity>> = _categories
+    val categories: LiveData<List<CategoryEntity>> = repository.allCategories.asLiveData()
 
     // Analytics
     private val analyticsMonth = MutableStateFlow(Calendar.getInstance().get(Calendar.MONTH) + 1)
@@ -276,6 +313,28 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
         DashboardStats(income, expense, income - expense, filtered.size)
     }.asLiveData()
 
+    val analyticsTopActors: LiveData<List<ActorSpending>> = combine(
+        analyticsMonth,
+        analyticsYear
+    ) { month: Int, year: Int ->
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.MONTH, month - 1)
+        cal.set(Calendar.YEAR, year)
+        cal.set(Calendar.DAY_OF_MONTH, 1)
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        val start = cal.timeInMillis
+
+        cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
+        cal.set(Calendar.HOUR_OF_DAY, 23)
+        cal.set(Calendar.MINUTE, 59)
+        cal.set(Calendar.SECOND, 59)
+        val end = cal.timeInMillis
+
+        repository.getTopSpendingActorsByDate(5, start, end)
+    }.flatMapLatest { it }.asLiveData()
+
     fun setAnalyticsFilter(isThisMonth: Boolean) {
         val cal = Calendar.getInstance()
         if (!isThisMonth) {
@@ -310,12 +369,6 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
             } catch (e: Exception) {
                 _syncStatus.value = SyncResult.Error(e.message)
             }
-        }
-    }
-
-    fun loadCategories() {
-        viewModelScope.launch {
-            _categories.value = repository.getAllCategoriesList()
         }
     }
 

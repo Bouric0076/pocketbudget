@@ -15,6 +15,7 @@ import androidx.work.WorkManager
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
+import android.os.Build
 import android.app.Activity
 import android.os.Bundle
 import android.content.Intent
@@ -76,7 +77,12 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
                      val intent = Intent(activity, AppLockActivity::class.java)
                      intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                      activity.startActivity(intent)
-                     activity.overridePendingTransition(0, 0)
+                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                          activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
+                      } else {
+                          @Suppress("DEPRECATION")
+                          activity.overridePendingTransition(0, 0)
+                      }
                 }
             }
         }
@@ -89,7 +95,12 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
                  val intent = Intent(activity, AppLockActivity::class.java)
                  intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                  activity.startActivity(intent)
-                 activity.overridePendingTransition(0, 0)
+                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                     activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
+                 } else {
+                     @Suppress("DEPRECATION")
+                     activity.overridePendingTransition(0, 0)
+                 }
             }
         }
     }

@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.first
 
 class SettingsViewModel(private val repository: TransactionRepository) : ViewModel() {
 
-    val categories: LiveData<List<CategoryEntity>> = repository.getAllCategories().asLiveData()
+    val categories: LiveData<List<CategoryEntity>> = repository.allCategories.asLiveData()
 
     private val _syncStatus = MutableLiveData<SyncResult>()
     val syncStatus: LiveData<SyncResult> = _syncStatus

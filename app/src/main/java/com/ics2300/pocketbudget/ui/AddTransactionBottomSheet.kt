@@ -75,7 +75,6 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
                 selectedCategoryId = categories[position].id
             }
         }
-        viewModel.loadCategories()
     }
 
     private fun setupSaveButton() {

@@ -29,15 +29,25 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.asFlow
 import com.ics2300.pocketbudget.R
+import com.ics2300.pocketbudget.data.ActorSpending
 import com.ics2300.pocketbudget.ui.dashboard.DashboardStats
 import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
 import com.ics2300.pocketbudget.ui.theme.*
 import com.ics2300.pocketbudget.utils.CategoryUtils
 import com.ics2300.pocketbudget.utils.CurrencyFormatter
 import kotlin.math.roundToInt
+
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import kotlin.math.atan2
+import kotlin.math.PI
+import kotlin.math.sqrt
 
 @Composable
 fun AnalyticsScreen(
@@ -48,9 +58,13 @@ fun AnalyticsScreen(
         .collectAsState(initial = DashboardStats(0.0, 0.0, 0.0, 0))
     val dailyTrend by viewModel.analyticsDailyTrend.asFlow().collectAsState(initial = emptyList())
     val categoryData by viewModel.analyticsCategoryData.asFlow().collectAsState(initial = emptyList())
+    val topActors by viewModel.analyticsTopActors.asFlow().collectAsState(initial = emptyList())
 
     var selectedTabIndex by remember { mutableIntStateOf(1) }
     val tabs = listOf("Last Month", "This Month")
+
+    var selectedCategoryForDrillDown by remember { mutableStateOf<String?>(null) }
+    val showDrillDownSheet = remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedTabIndex) {
         viewModel.setAnalyticsFilter(selectedTabIndex == 1)
@@ -97,8 +111,19 @@ fun AnalyticsScreen(
             item {
                 SpendingChartCard(
                     totalExpense = totalExpense,
-                    dailyTrend = dailyTrend
+                    dailyTrend = dailyTrend,
+                    categoryData = categoryData,
+                    onCategorySelected = { categoryName ->
+                        selectedCategoryForDrillDown = categoryName
+                        showDrillDownSheet.value = true
+                    }
                 )
+            }
+
+            if (topActors.isNotEmpty()) {
+                item {
+                    TopActorsSection(topActors)
+                }
             }
 
             item {
@@ -153,7 +178,7 @@ fun AnalyticsScreen(
                 )
             }
 
-            val totalSpent = categoryData.sumOf { it.totalSpent }
+            val totalSpentCount = categoryData.sumOf { it.totalSpent }
             val sortedCategories = categoryData.sortedByDescending { it.totalSpent }
 
             if (sortedCategories.isEmpty()) {
@@ -186,13 +211,134 @@ fun AnalyticsScreen(
                         rank = rank,
                         name = item.categoryName,
                         amount = item.totalSpent,
-                        percentage = if (totalSpent > 0) (item.totalSpent / totalSpent).toFloat() else 0f,
+                        percentage = if (totalSpentCount > 0) (item.totalSpent / totalSpentCount).toFloat() else 0f,
                         iconRes = CategoryUtils.getIconResId(item.iconName),
-                        color = Color(CategoryUtils.getColor(item.colorHex))
+                        color = Color(CategoryUtils.getColor(item.colorHex)),
+                        onClick = {
+                            selectedCategoryForDrillDown = item.categoryName
+                            showDrillDownSheet.value = true
+                        }
                     )
                 }
             }
         }
+
+        if (showDrillDownSheet.value && selectedCategoryForDrillDown != null) {
+            CategoryDrillDownBottomSheet(
+                categoryName = selectedCategoryForDrillDown!!,
+                viewModel = viewModel,
+                onDismiss = { showDrillDownSheet.value = false }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoryDrillDownBottomSheet(
+    categoryName: String,
+    viewModel: DashboardViewModel,
+    onDismiss: () -> Unit
+) {
+    val allTransactions by viewModel.allTransactions.asFlow().collectAsState(initial = emptyList())
+    val categories by viewModel.categories.asFlow().collectAsState(initial = emptyList())
+    
+    val category = categories.find { it.name == categoryName }
+    val filteredTransactions = allTransactions.filter { it.categoryId == category?.id }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                text = "$categoryName Transactions",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = BrandDarkGreen,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+            )
+
+            if (filteredTransactions.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "No transactions found", color = TextSecondary)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(filteredTransactions) { transaction ->
+                        DrillDownTransactionItem(transaction)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DrillDownTransactionItem(transaction: com.ics2300.pocketbudget.data.TransactionEntity) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(BrandBackgroundGray, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(BrandDarkGreen.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_money),
+                contentDescription = null,
+                tint = BrandDarkGreen,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        
+        Spacer(modifier = Modifier.width(12.dp))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = transaction.partyName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = BrandDarkGreen,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            val sdf = remember { java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()) }
+            Text(
+                text = sdf.format(java.util.Date(transaction.timestamp)),
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSecondary
+            )
+        }
+        
+        Text(
+            text = CurrencyFormatter.formatKsh(transaction.amount),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.ExtraBold,
+            color = BrandDarkGreen
+        )
     }
 }
 
@@ -323,11 +469,86 @@ private fun HeroSummaryCard(
                     valueColor = Color(0xFFFFB199)
                 )
                 HeroMetric(
-                    label = "Savings",
+                    label = if (savingsRate >= 0) "Savings" else "Deficit",
                     value = "${savingsRate.roundToInt()}%",
                     valueColor = if (savingsRate >= 0) BrandLightGreen else Color(0xFFFFB199)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun TopActorsSection(actors: List<ActorSpending>) {
+    Column {
+        Text(
+            text = "Top Recipients",
+            style = MaterialTheme.typography.titleLarge,
+            color = TextPrimary,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            actors.forEach { actor ->
+                TopActorCard(actor)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopActorCard(actor: ActorSpending) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .width(140.dp)
+            .border(1.dp, BrandDarkGreen.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(BrandBackgroundGray),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_money),
+                    contentDescription = null,
+                    tint = BrandDarkGreen,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = actor.partyName,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            
+            Text(
+                text = CurrencyFormatter.formatKsh(actor.totalAmount),
+                style = MaterialTheme.typography.labelSmall,
+                color = BrandSecondaryGreen,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 11.sp
+            )
         }
     }
 }
@@ -356,7 +577,9 @@ private fun HeroMetric(
 @Composable
 private fun SpendingChartCard(
     totalExpense: Double,
-    dailyTrend: List<ChartData>
+    dailyTrend: List<ChartData>,
+    categoryData: List<com.ics2300.pocketbudget.data.CategoryBudgetProgress>,
+    onCategorySelected: (String) -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -368,7 +591,7 @@ private fun SpendingChartCard(
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                text = "Total Spending",
+                text = "Spending Distribution",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary
             )
@@ -380,12 +603,160 @@ private fun SpendingChartCard(
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                InteractivePieChart(
+                    categoryData = categoryData,
+                    onCategorySelected = onCategorySelected,
+                    modifier = Modifier
+                        .size(180.dp)
+                        .weight(1f)
+                )
+                
+                Spacer(modifier = Modifier.width(16.dp))
+                
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    categoryData.sortedByDescending { it.totalSpent }.take(4).forEach { item ->
+                        ChartLegendItem(
+                            label = item.categoryName,
+                            color = Color(CategoryUtils.getColor(item.colorHex))
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Text(
+                text = "Daily Trend",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = BrandDarkGreen,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
             BarChartCompose(
                 data = dailyTrend,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(210.dp)
+                    .height(180.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun ChartLegendItem(label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+fun InteractivePieChart(
+    categoryData: List<com.ics2300.pocketbudget.data.CategoryBudgetProgress>,
+    onCategorySelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val totalSpent = categoryData.sumOf { it.totalSpent }
+    if (totalSpent <= 0) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text(text = "No data", color = TextSecondary)
+        }
+        return
+    }
+
+    var center by remember { mutableStateOf(Offset.Zero) }
+
+    Canvas(
+        modifier = modifier
+            .pointerInput(categoryData) {
+                detectTapGestures { offset ->
+                    val dx = offset.x - center.x
+                    val dy = offset.y - center.y
+                    val distance = sqrt(dx * dx + dy * dy)
+                    val radius = (if (size.width < size.height) size.width else size.height).toFloat() / 2
+                    
+                    // Only detect taps inside the ring (donut)
+                    if (distance <= radius && distance >= radius * 0.6f) {
+                        var angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+                        if (angle < 0) angle += 360f
+                        
+                        // Pie starts at -90 degrees (top)
+                        var currentAngle = 270f 
+                        
+                        categoryData.forEach { item ->
+                            val sweep = ((item.totalSpent / totalSpent) * 360).toFloat()
+                            val start = currentAngle % 360
+                            val end = (currentAngle + sweep) % 360
+                            
+                            val isWithin = if (start < end) {
+                                angle in start..end
+                            } else {
+                                angle >= start || angle <= end
+                            }
+                            
+                            if (isWithin && item.totalSpent > 0) {
+                                onCategorySelected(item.categoryName)
+                                return@detectTapGestures
+                            }
+                            currentAngle += sweep
+                        }
+                    }
+                }
+            }
+    ) {
+        center = this.center
+        val strokeWidth = 35.dp.toPx()
+        val radius = (size.minDimension - strokeWidth) / 2
+        var currentAngle = -90f
+
+        categoryData.forEach { item ->
+            if (item.totalSpent > 0) {
+                val sweep = ((item.totalSpent / totalSpent) * 360).toFloat()
+                drawArc(
+                    color = Color(CategoryUtils.getColor(item.colorHex)),
+                    startAngle = currentAngle,
+                    sweepAngle = sweep,
+                    useCenter = false,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Butt),
+                    topLeft = Offset(center.x - radius, center.y - radius),
+                    size = Size(radius * 2, radius * 2)
+                )
+                currentAngle += sweep
+            }
+        }
+        
+        // Draw total in center
+        drawContext.canvas.nativeCanvas.apply {
+            val paint = Paint().apply {
+                color = BrandDarkGreen.toArgb()
+                textSize = 14.dp.toPx()
+                textAlign = Paint.Align.CENTER
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            }
+            drawText("Top", center.x, center.y - 5.dp.toPx(), paint)
+            paint.textSize = 11.dp.toPx()
+            paint.color = TextSecondary.toArgb()
+            drawText("Spends", center.x, center.y + 12.dp.toPx(), paint)
         }
     }
 }
@@ -626,7 +997,8 @@ fun CategoryItem(
     amount: Double,
     percentage: Float,
     iconRes: Int,
-    color: Color
+    color: Color,
+    onClick: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -634,6 +1006,7 @@ fun CategoryItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onClick() }
             .border(1.dp, BrandDarkGreen.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
     ) {
         Row(
@@ -644,79 +1017,73 @@ fun CategoryItem(
         ) {
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
-                    .background(BrandDarkGreen.copy(alpha = 0.08f)),
+                    .background(BrandBackgroundGray),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = rank.toString(),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelLarge,
                     color = BrandDarkGreen,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
-                    .background(color.copy(alpha = 0.14f)),
+                    .background(color.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     painter = painterResource(id = iconRes),
                     contentDescription = null,
                     tint = color,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = BrandDarkGreen
-                    )
-                    Text(
-                        text = CurrencyFormatter.formatKsh(amount),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = color
-                    )
-                }
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = BrandDarkGreen
+                )
+                
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                LinearProgressIndicator(
+                    progress = { percentage },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = color,
+                    trackColor = color.copy(alpha = 0.15f),
+                )
+            }
 
-                Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.width(18.dp))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    LinearProgressIndicator(
-                        progress = { percentage },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(8.dp)),
-                        color = color,
-                        trackColor = Color.LightGray.copy(alpha = 0.16f)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "${(percentage * 100).roundToInt()}%",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextSecondary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = CurrencyFormatter.formatKsh(amount),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = BrandDarkGreen
+                )
+                Text(
+                    text = "${(percentage * 100).roundToInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary
+                )
             }
         }
     }

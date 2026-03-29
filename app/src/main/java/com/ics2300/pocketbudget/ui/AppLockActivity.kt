@@ -118,6 +118,7 @@ class AppLockActivity : AppCompatActivity() {
     }
 
     // Prevent back button from bypassing lock
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         // Do nothing or minimize app
         moveTaskToBack(true)

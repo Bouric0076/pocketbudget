@@ -147,6 +147,32 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <!-- Top Recipients Section -->
+            <LinearLayout
+                android:id="@+id/layout_top_recipients"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="24dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Top Recipients"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:layout_marginBottom="12dp"/>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recycler_top_recipients"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                    tools:listitem="@layout/item_actor_spending"/>
+            </LinearLayout>
+
             <!-- Recent Transactions Header -->
             <LinearLayout
                 android:layout_width="match_parent"

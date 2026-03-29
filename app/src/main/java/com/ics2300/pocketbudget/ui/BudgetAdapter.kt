@@ -47,7 +47,7 @@ class BudgetAdapter(
                 
                 val remaining = item.limitAmount - item.spentAmount
                 if (remaining >= 0) {
-                    binding.textRemainingCategory.text = "${CurrencyFormatter.formatKsh(remaining)} left"
+                    binding.textRemainingCategory.text = "${CurrencyFormatter.formatKsh(remaining)} remaining"
                     binding.textRemainingCategory.setTextColor(CategoryUtils.getColor(item.colorHex))
                     binding.textPercentage.setTextColor(CategoryUtils.getColor(item.colorHex))
                     binding.progressCategory.progressTintList = android.content.res.ColorStateList.valueOf(CategoryUtils.getColor(item.colorHex))
@@ -57,6 +57,10 @@ class BudgetAdapter(
                     binding.textPercentage.setTextColor(ContextCompat.getColor(binding.root.context, android.R.color.holo_red_dark))
                     binding.progressCategory.progressTintList = ContextCompat.getColorStateList(binding.root.context, android.R.color.holo_red_dark)
                 }
+                
+                // Set "Spent vs. Remaining" text explicitly
+                binding.textSpentAmount.text = "${CurrencyFormatter.formatKsh(item.spentAmount)} spent"
+                binding.textLimitAmount.text = " of ${CurrencyFormatter.formatKsh(item.limitAmount)}"
                 
                 // Forecast Check
                 val calendar = Calendar.getInstance()
@@ -75,7 +79,8 @@ class BudgetAdapter(
 
             } else {
                 // No Budget Set
-                binding.textLimitAmount.text = "/ No Limit"
+                binding.textSpentAmount.text = CurrencyFormatter.formatKsh(item.spentAmount)
+                binding.textLimitAmount.text = " / No Limit"
                 binding.textPercentage.text = ""
                 binding.progressCategory.progress = 0
                 binding.textRemainingCategory.text = "Tap to set budget"

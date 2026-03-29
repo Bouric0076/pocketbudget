@@ -40,11 +40,8 @@ class TransactionsFragment : Fragment() {
         _binding = FragmentTransactionsBinding.inflate(inflater, container, false)
         val root: View = binding.root
         
-        // Load categories for dialog
-        viewModel.loadCategories()
-
         val adapter = TransactionAdapter { transaction ->
-            showCategorySelectionDialog(transaction)
+            showTransactionDetails(transaction)
         }
         binding.recyclerviewTransactions.adapter = adapter
         binding.recyclerviewTransactions.layoutManager = LinearLayoutManager(context)
@@ -78,8 +75,52 @@ class TransactionsFragment : Fragment() {
         setupSearch()
         setupChips()
         setupDateFilter()
+        setupAdvancedFilter()
+
+        // Observe Categories to ensure they are loaded for details view
+        viewModel.categories.observe(viewLifecycleOwner) { /* Ensure LiveData is active */ }
 
         return root
+    }
+
+    private fun setupAdvancedFilter() {
+        binding.btnFilterAdvanced.setOnClickListener {
+            val bottomSheet = AdvancedFilterBottomSheet(
+                initialMin = viewModel.minAmountFilter.value,
+                initialMax = viewModel.maxAmountFilter.value,
+                initialActor = viewModel.selectedActorFilter.value,
+                onApply = { min, max, actor ->
+                    viewModel.setAdvancedFilters(min, max, actor)
+                    // Visual feedback: Change color if filters are active
+                    if (min != null || max != null || actor != null) {
+                        binding.btnFilterAdvanced.setColorFilter(requireContext().getColor(R.color.brand_light_green))
+                    } else {
+                        binding.btnFilterAdvanced.setColorFilter(requireContext().getColor(R.color.white))
+                    }
+                },
+                onReset = {
+                    viewModel.clearAdvancedFilters()
+                    binding.btnFilterAdvanced.setColorFilter(requireContext().getColor(R.color.white))
+                }
+            )
+            bottomSheet.show(parentFragmentManager, AdvancedFilterBottomSheet.TAG)
+        }
+
+        // Long press to clear
+        binding.btnFilterAdvanced.setOnLongClickListener {
+            viewModel.clearAdvancedFilters()
+            binding.btnFilterAdvanced.setColorFilter(requireContext().getColor(R.color.white))
+            android.widget.Toast.makeText(context, "Advanced filters cleared", android.widget.Toast.LENGTH_SHORT).show()
+            true
+        }
+    }
+
+    private fun showTransactionDetails(transaction: TransactionEntity) {
+        val categoryName = viewModel.categories.value?.find { it.id == transaction.categoryId }?.name ?: "Uncategorized"
+        val bottomSheet = TransactionDetailsBottomSheet(transaction, categoryName) {
+            showCategorySelectionDialog(transaction)
+        }
+        bottomSheet.show(parentFragmentManager, TransactionDetailsBottomSheet.TAG)
     }
 
     private fun setupDateFilter() {
@@ -120,6 +161,9 @@ class TransactionsFragment : Fragment() {
 
             datePicker.show(parentFragmentManager, "date_range_picker")
         }
+        
+        // Check initial state for visual feedback
+        // Note: This would require observing the dateRangeFilter, but for now we'll just handle it in setup
     }
 
     private fun setupSearch() {
