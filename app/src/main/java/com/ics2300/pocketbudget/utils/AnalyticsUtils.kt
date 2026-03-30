@@ -82,6 +82,22 @@ object AnalyticsUtils {
     }
 
     /**
+     * Calculates the daily "Safe to Spend" amount.
+     * Formula: (TotalBudget - CurrentSpent) / RemainingDaysInMonth
+     */
+    fun calculateSafeToSpend(
+        currentSpent: Double,
+        totalBudget: Double,
+        dayOfMonth: Int,
+        totalDaysInMonth: Int
+    ): Double {
+        if (totalBudget <= 0) return 0.0
+        val remainingBudget = totalBudget - currentSpent
+        val remainingDays = (totalDaysInMonth - dayOfMonth) + 1 // Include today
+        return if (remainingDays > 0) (remainingBudget / remainingDays).coerceAtLeast(0.0) else 0.0
+    }
+
+    /**
      * Identifies potential recurring bills due soon
      * Returns a list of predicted transactions (Name, Amount, Due Date)
      */

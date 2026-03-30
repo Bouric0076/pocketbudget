@@ -21,7 +21,7 @@ import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.TransactionEntity
 import com.ics2300.pocketbudget.databinding.FragmentDashboardBinding
 import com.ics2300.pocketbudget.ui.dashboard.ActorSpendingAdapter
-import com.ics2300.pocketbudget.ui.dashboard.DashboardStats
+import com.ics2300.pocketbudget.data.DashboardStats
 import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
 import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModelFactory
 import com.ics2300.pocketbudget.ui.dashboard.TimeRange
@@ -186,7 +186,7 @@ class DashboardFragment : Fragment() {
         }
     }
 
-    private fun updateDashboardStats(stats: com.ics2300.pocketbudget.ui.dashboard.DashboardStats) {
+    private fun updateDashboardStats(stats: DashboardStats) {
         val context = requireContext()
         val isPrivacy = SecurityUtils.isPrivacyModeEnabled(context)
         binding.textIncomeAmount.text = CurrencyFormatter.formatKsh(stats.totalIncome, isPrivacy)
@@ -283,8 +283,8 @@ class DashboardFragment : Fragment() {
         binding.recyclerRecentTransactions.layoutManager = LinearLayoutManager(context)
         
         viewModel.recentTransactions.observe(viewLifecycleOwner) { transactions ->
-            val groupedList = TransactionGrouper.groupTransactions(transactions)
-            adapter.submitList(groupedList)
+            val items = transactions.map { TransactionListItem.Transaction(it) }
+            adapter.submitList(items)
             
             if (transactions.isEmpty()) {
                 binding.recyclerRecentTransactions.visibility = View.GONE

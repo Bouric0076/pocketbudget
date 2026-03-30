@@ -14,9 +14,11 @@ import com.ics2300.pocketbudget.MainApplication
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.TransactionEntity
 import com.ics2300.pocketbudget.databinding.FragmentTransactionsBinding
-import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
-import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModelFactory
+import com.ics2300.pocketbudget.ui.transactions.TransactionsViewModel
+import com.ics2300.pocketbudget.ui.transactions.TransactionsViewModelFactory
 import com.ics2300.pocketbudget.ui.dashboard.TransactionFilter
+import com.ics2300.pocketbudget.ui.budget.BudgetViewModel
+import com.ics2300.pocketbudget.ui.budget.BudgetViewModelFactory
 import com.ics2300.pocketbudget.utils.TransactionGrouper
 
 import com.google.android.material.datepicker.MaterialDatePicker
@@ -29,8 +31,12 @@ class TransactionsFragment : Fragment() {
     private var _binding: FragmentTransactionsBinding? = null
     private val binding get() = _binding!!
 
-    private val viewModel: DashboardViewModel by viewModels {
-        DashboardViewModelFactory((requireActivity().application as MainApplication).repository)
+    private val viewModel: TransactionsViewModel by viewModels {
+        TransactionsViewModelFactory((requireActivity().application as MainApplication).repository)
+    }
+
+    private val budgetViewModel: BudgetViewModel by viewModels {
+        BudgetViewModelFactory((requireActivity().application as MainApplication).repository)
     }
 
     override fun onCreateView(
@@ -77,8 +83,8 @@ class TransactionsFragment : Fragment() {
         setupDateFilter()
         setupAdvancedFilter()
 
-        // Observe Categories to ensure they are loaded for details view
-        viewModel.categories.observe(viewLifecycleOwner) { /* Ensure LiveData is active */ }
+        // Observe Categories from budgetViewModel to ensure they are loaded for details view
+        budgetViewModel.categories.observe(viewLifecycleOwner) { /* Ensure LiveData is active */ }
 
         return root
     }
@@ -116,7 +122,7 @@ class TransactionsFragment : Fragment() {
     }
 
     private fun showTransactionDetails(transaction: TransactionEntity) {
-        val categoryName = viewModel.categories.value?.find { it.id == transaction.categoryId }?.name ?: "Uncategorized"
+        val categoryName = budgetViewModel.categories.value?.find { it.id == transaction.categoryId }?.name ?: "Uncategorized"
         val bottomSheet = TransactionDetailsBottomSheet(transaction, categoryName) {
             showCategorySelectionDialog(transaction)
         }
@@ -191,7 +197,7 @@ class TransactionsFragment : Fragment() {
     }
 
     private fun showCategorySelectionDialog(transaction: TransactionEntity) {
-        val categories = viewModel.categories.value ?: return
+        val categories = budgetViewModel.categories.value ?: return
         
         val bottomSheet = CategorySelectionBottomSheet(
             categories,

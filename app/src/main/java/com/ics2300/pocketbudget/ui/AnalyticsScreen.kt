@@ -35,8 +35,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.asFlow
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.ActorSpending
-import com.ics2300.pocketbudget.ui.dashboard.DashboardStats
-import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
+import com.ics2300.pocketbudget.data.DashboardStats
+import com.ics2300.pocketbudget.ui.analytics.AnalyticsViewModel
 import com.ics2300.pocketbudget.ui.theme.*
 import com.ics2300.pocketbudget.utils.CategoryUtils
 import com.ics2300.pocketbudget.utils.CurrencyFormatter
@@ -51,10 +51,12 @@ import kotlin.math.sqrt
 
 @Composable
 fun AnalyticsScreen(
-    viewModel: DashboardViewModel,
+    viewModel: AnalyticsViewModel,
     modifier: Modifier = Modifier
 ) {
     val analyticsSummary by viewModel.analyticsSummary.asFlow()
+        .collectAsState(initial = DashboardStats(0.0, 0.0, 0.0, 0))
+    val previousSummary by viewModel.previousMonthSummary.asFlow()
         .collectAsState(initial = DashboardStats(0.0, 0.0, 0.0, 0))
     val dailyTrend by viewModel.analyticsDailyTrend.asFlow().collectAsState(initial = emptyList())
     val categoryData by viewModel.analyticsCategoryData.asFlow().collectAsState(initial = emptyList())
@@ -75,6 +77,10 @@ fun AnalyticsScreen(
     val netFlow = totalIncome - totalExpense
     val savingsRate = if (totalIncome > 0) ((netFlow / totalIncome) * 100.0).coerceIn(-999.0, 999.0) else 0.0
     val avgDailySpend = if (dailyTrend.isNotEmpty()) totalExpense / dailyTrend.size else 0.0
+
+    // Comparison logic
+    val prevExpense = previousSummary.totalExpense
+    val expenseDiffPercent = if (prevExpense > 0) ((totalExpense - prevExpense) / prevExpense) * 100 else 0.0
 
     Scaffold(
         containerColor = BrandBackgroundGray,
@@ -100,12 +106,21 @@ fun AnalyticsScreen(
             }
 
             item {
-                HeroSummaryCard(
-                    netFlow = netFlow,
-                    income = totalIncome,
-                    expense = totalExpense,
-                    savingsRate = savingsRate
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HeroSummaryCard(
+                        netFlow = netFlow,
+                        income = totalIncome,
+                        expense = totalExpense,
+                        savingsRate = savingsRate
+                    )
+                    
+                    if (prevExpense > 0) {
+                        ComparisonInsightCard(
+                            diffPercent = expenseDiffPercent,
+                            period = if (selectedTabIndex == 1) "last month" else "the previous period"
+                        )
+                    }
+                }
             }
 
             item {
@@ -237,7 +252,7 @@ fun AnalyticsScreen(
 @Composable
 fun CategoryDrillDownBottomSheet(
     categoryName: String,
-    viewModel: DashboardViewModel,
+    viewModel: AnalyticsViewModel,
     onDismiss: () -> Unit
 ) {
     val allTransactions by viewModel.allTransactions.asFlow().collectAsState(initial = emptyList())
@@ -339,6 +354,44 @@ fun DrillDownTransactionItem(transaction: com.ics2300.pocketbudget.data.Transact
             fontWeight = FontWeight.ExtraBold,
             color = BrandDarkGreen
         )
+    }
+}
+
+@Composable
+fun ComparisonInsightCard(
+    diffPercent: Double,
+    period: String
+) {
+    val isIncrease = diffPercent > 0
+    val absPercent = kotlin.math.abs(diffPercent).roundToInt()
+    val color = if (isIncrease) AnalyticsCoral else BrandSecondaryGreen
+    val icon = if (isIncrease) "↑" else "↓"
+    val text = if (isIncrease) "Spent $absPercent% more than $period" else "Spent $absPercent% less than $period"
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = icon,
+                color = color,
+                fontWeight = FontWeight.Black,
+                fontSize = 18.sp
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = text,
+                color = color,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 

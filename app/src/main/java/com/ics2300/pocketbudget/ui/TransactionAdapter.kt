@@ -98,7 +98,13 @@ class TransactionAdapter(private val onTransactionClick: (TransactionEntity) -> 
         }
 
         override fun areContentsTheSame(oldItem: TransactionListItem, newItem: TransactionListItem): Boolean {
-            return oldItem == newItem
+            return if (oldItem is TransactionListItem.Transaction && newItem is TransactionListItem.Transaction) {
+                oldItem.transaction == newItem.transaction
+            } else if (oldItem is TransactionListItem.Header && newItem is TransactionListItem.Header) {
+                oldItem.title == newItem.title
+            } else {
+                false
+            }
         }
     }
 }

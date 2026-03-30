@@ -7,7 +7,7 @@ class NotificationRepository(private val notificationDao: NotificationDao) {
     val allNotifications: Flow<List<NotificationEntity>> = notificationDao.getAllNotifications()
     val unreadCount: Flow<Int> = notificationDao.getUnreadCount()
 
-    suspend fun addNotification(title: String, message: String, type: String, actionData: String? = null) {
+    suspend fun addNotification(title: String, message: String, type: String, actionData: String? = null): Int {
         val notification = NotificationEntity(
             title = title,
             message = message,
@@ -15,7 +15,7 @@ class NotificationRepository(private val notificationDao: NotificationDao) {
             timestamp = System.currentTimeMillis(),
             actionData = actionData
         )
-        notificationDao.insertNotification(notification)
+        return notificationDao.insertNotification(notification).toInt()
     }
 
     suspend fun markAsRead(id: Int) {

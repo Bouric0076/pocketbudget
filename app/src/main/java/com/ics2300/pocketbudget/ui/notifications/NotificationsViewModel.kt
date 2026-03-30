@@ -20,6 +20,12 @@ class NotificationsViewModel(private val repository: NotificationRepository) : V
         }
     }
 
+    fun snooze(notification: NotificationEntity) {
+        // Implement snooze logic - for now, just mark as read to clear from list
+        // In a real app, this would reschedule the notification.
+        markAsRead(notification)
+    }
+
     fun markAllAsRead() {
         viewModelScope.launch {
             repository.markAllAsRead()

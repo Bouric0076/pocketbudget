@@ -9,14 +9,14 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import com.ics2300.pocketbudget.MainApplication
-import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
-import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModelFactory
+import com.ics2300.pocketbudget.ui.analytics.AnalyticsViewModel
+import com.ics2300.pocketbudget.ui.analytics.AnalyticsViewModelFactory
 import com.ics2300.pocketbudget.ui.theme.PocketbudgetTheme
 
 class AnalyticsFragment : Fragment() {
 
-    private val viewModel: DashboardViewModel by viewModels {
-        DashboardViewModelFactory((requireActivity().application as MainApplication).repository)
+    private val viewModel: AnalyticsViewModel by viewModels {
+        AnalyticsViewModelFactory((requireActivity().application as MainApplication).repository)
     }
 
     override fun onCreateView(

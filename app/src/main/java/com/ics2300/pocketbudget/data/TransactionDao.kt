@@ -24,6 +24,44 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE partyName LIKE '%' || :query || '%' ORDER BY timestamp DESC")
     fun searchTransactions(query: String): Flow<List<TransactionEntity>>
 
+    @Query("""
+        SELECT * FROM transactions 
+        WHERE (:query IS NULL OR partyName LIKE '%' || :query || '%')
+        AND (:startDate IS NULL OR timestamp >= :startDate)
+        AND (:endDate IS NULL OR timestamp <= :endDate)
+        AND (:minAmount IS NULL OR amount >= :minAmount)
+        AND (:maxAmount IS NULL OR amount <= :maxAmount)
+        AND (:actor IS NULL OR partyName LIKE '%' || :actor || '%')
+        AND (
+            :filterType = 'ALL' 
+            OR (:filterType = 'INCOME' AND (type IN ('Received', 'Deposit')))
+            OR (:filterType = 'EXPENSE' AND (type NOT IN ('Received', 'Deposit')))
+            OR (:filterType = 'UNCATEGORIZED' AND categoryId = 1)
+        )
+        ORDER BY timestamp DESC
+    """)
+    fun getFilteredTransactions(
+        query: String?,
+        startDate: Long?,
+        endDate: Long?,
+        minAmount: Double?,
+        maxAmount: Double?,
+        actor: String?,
+        filterType: String
+    ): Flow<List<TransactionEntity>>
+
+    @Query("""
+        SELECT 
+            SUM(CASE WHEN type IN ('Received', 'Deposit') THEN amount ELSE 0 END) as totalIncome,
+            SUM(CASE WHEN type NOT IN ('Received', 'Deposit') THEN amount ELSE 0 END) as totalExpense,
+            SUM(CASE WHEN type IN ('Received', 'Deposit') THEN amount ELSE -amount END) as balance,
+            COUNT(*) as transactionCount
+        FROM transactions
+        WHERE (:startDate IS NULL OR timestamp >= :startDate)
+        AND (:endDate IS NULL OR timestamp <= :endDate)
+    """)
+    fun getDashboardStats(startDate: Long?, endDate: Long?): Flow<DashboardStats>
+
     @Query("SELECT * FROM transactions WHERE categoryId = :categoryId")
     fun getTransactionsByCategory(categoryId: Int): Flow<List<TransactionEntity>>
 

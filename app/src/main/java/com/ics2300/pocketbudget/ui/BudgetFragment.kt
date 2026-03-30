@@ -18,8 +18,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.ics2300.pocketbudget.MainApplication
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.databinding.FragmentBudgetBinding
-import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
-import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModelFactory
+import com.ics2300.pocketbudget.ui.budget.BudgetViewModel
+import com.ics2300.pocketbudget.ui.budget.BudgetViewModelFactory
 import com.ics2300.pocketbudget.utils.CurrencyFormatter
 
 class BudgetFragment : Fragment() {
@@ -27,8 +27,8 @@ class BudgetFragment : Fragment() {
     private var _binding: FragmentBudgetBinding? = null
     private val binding get() = _binding!!
 
-    private val viewModel: DashboardViewModel by viewModels {
-        DashboardViewModelFactory((requireActivity().application as MainApplication).repository)
+    private val viewModel: BudgetViewModel by viewModels {
+        BudgetViewModelFactory((requireActivity().application as MainApplication).repository)
     }
 
     override fun onCreateView(

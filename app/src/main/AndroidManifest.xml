@@ -25,6 +25,7 @@
         </receiver>
 
         <receiver android:name=".utils.SnoozeReceiver" android:exported="false" />
+        <receiver android:name=".receivers.NotificationActionReceiver" android:exported="false" />
 
         <activity
             android:name=".ui.AppLockActivity"

@@ -11,9 +11,10 @@ import com.ics2300.pocketbudget.data.CategoryEntity
 import com.ics2300.pocketbudget.data.CategorySpending
 import com.ics2300.pocketbudget.data.TransactionEntity
 import com.ics2300.pocketbudget.data.TransactionRepository
+import com.ics2300.pocketbudget.data.DashboardStats
 import com.ics2300.pocketbudget.data.RecurringTransactionEntity
-import com.ics2300.pocketbudget.data.CategoryBudgetProgress
 import com.ics2300.pocketbudget.ui.ChartData
+import com.ics2300.pocketbudget.utils.AnalyticsUtils
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -32,37 +33,40 @@ enum class TransactionFilter {
     ALL, INCOME, EXPENSE, UNCATEGORIZED
 }
 
-data class DashboardStats(
-    val totalIncome: Double,
-    val totalExpense: Double,
-    val balance: Double,
-    val transactionCount: Int
-)
-
 @OptIn(ExperimentalCoroutinesApi::class)
 class DashboardViewModel(private val repository: TransactionRepository) : ViewModel() {
 
-    private val searchQuery = MutableStateFlow("")
     private val timeRange = MutableStateFlow(TimeRange.DAY)
-    private val filterType = MutableStateFlow(TransactionFilter.ALL)
-    
-    private val currentCalendar = Calendar.getInstance()
-    val currentMonth = MutableStateFlow(currentCalendar.get(Calendar.MONTH) + 1) // 1-12
-    val currentYear = MutableStateFlow(currentCalendar.get(Calendar.YEAR))
 
-    // For Budget Fragment
-    val budgetProgress: LiveData<List<CategoryBudgetProgress>> = combine(
-        currentMonth,
-        currentYear
-    ) { month, year ->
-        repository.getBudgetProgress(month, year)
-    }.flatMapLatest { it }.asLiveData()
+    // For Dashboard Stats (Filtered by TimeRange)
+    val dashboardStats: LiveData<DashboardStats> = timeRange.flatMapLatest { range ->
+        val (start, end) = getTimestampRange(range)
+        repository.getDashboardStats(
+            if (range == TimeRange.ALL) null else start,
+            if (range == TimeRange.ALL) null else end
+        )
+    }.asLiveData()
 
-    fun setBudget(categoryId: Int, amount: Double) {
-        viewModelScope.launch {
-            repository.setBudget(categoryId, amount, currentMonth.value, currentYear.value)
-        }
-    }
+    // Recent Transactions
+    val recentTransactions: LiveData<List<TransactionEntity>> = timeRange.flatMapLatest { range ->
+        val (start, end) = getTimestampRange(range)
+        repository.getFilteredTransactions(
+            null,
+            if (range == TimeRange.ALL) null else start,
+            if (range == TimeRange.ALL) null else end,
+            null,
+            null,
+            null,
+            "ALL"
+        ).map { it.take(5) }
+    }.asLiveData()
+
+    val topSpendingActors: LiveData<List<ActorSpending>> = timeRange.flatMapLatest { range ->
+        val (start, end) = getTimestampRange(range)
+        repository.getTopSpendingActorsByDate(5, start, end)
+    }.asLiveData()
+
+    val categories: LiveData<List<CategoryEntity>> = repository.allCategories.asLiveData()
 
     fun addTransaction(transaction: TransactionEntity) {
         viewModelScope.launch {
@@ -86,274 +90,22 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
                 type = type,
                 frequency = frequency,
                 startDate = startDate,
-                nextDueDate = startDate, // Starts immediately or scheduled date
+                nextDueDate = startDate,
                 isActive = true
             )
             repository.addRecurringTransaction(recurring)
-            
-            // Trigger a check immediately to create the first one if due
             repository.processDueRecurringTransactions()
         }
-    }
-
-    // For Transactions Fragment (Searchable + Filterable + Date Range + Advanced)
-    private val dateRangeFilter = MutableStateFlow<Pair<Long, Long>?>(null)
-    val minAmountFilter = MutableStateFlow<Double?>(null)
-    val maxAmountFilter = MutableStateFlow<Double?>(null)
-    val selectedActorFilter = MutableStateFlow<String?>(null)
-
-    fun setAdvancedFilters(min: Double?, max: Double?, actor: String?) {
-        minAmountFilter.value = min
-        maxAmountFilter.value = max
-        selectedActorFilter.value = actor
-    }
-
-    fun clearAdvancedFilters() {
-        minAmountFilter.value = null
-        maxAmountFilter.value = null
-        selectedActorFilter.value = null
-    }
-
-    fun setDateRangeFilter(start: Long, end: Long) {
-        dateRangeFilter.value = Pair(start, end)
-    }
-
-    fun clearDateRangeFilter() {
-        dateRangeFilter.value = null
-    }
-
-    val allTransactions: LiveData<List<TransactionEntity>> = combine(
-        combine(searchQuery, filterType, dateRangeFilter) { query, filter, dateRange ->
-            Triple(query, filter, dateRange)
-        },
-        combine(minAmountFilter, maxAmountFilter, selectedActorFilter) { min, max, actor ->
-            Triple(min, max, actor)
-        },
-        repository.allTransactions
-    ) { basicFilters, advancedFilters, transactions ->
-        val (query, filter, dateRange) = basicFilters
-        val (minAmount, maxAmount, actor) = advancedFilters
-        
-        var result = transactions
-        
-        // Apply Date Range
-        if (dateRange != null) {
-            result = result.filter { it.timestamp in dateRange.first..dateRange.second }
-        }
-        
-        // Apply Search
-        if (query.isNotBlank()) {
-            result = result.filter { 
-                it.partyName.contains(query, ignoreCase = true)
-            }
-        }
-
-        // Apply Advanced Filters
-        if (minAmount != null) {
-            result = result.filter { it.amount >= minAmount }
-        }
-        if (maxAmount != null) {
-            result = result.filter { it.amount <= maxAmount }
-        }
-        if (actor != null && actor.isNotBlank()) {
-            result = result.filter { it.partyName.contains(actor, ignoreCase = true) }
-        }
-        
-        // Apply Filter
-        result = when (filter) {
-            TransactionFilter.ALL -> result
-            TransactionFilter.INCOME -> result.filter { it.type.equals("Received", ignoreCase = true) || it.type.equals("Deposit", ignoreCase = true) }
-            TransactionFilter.EXPENSE -> result.filter { !it.type.equals("Received", ignoreCase = true) && !it.type.equals("Deposit", ignoreCase = true) }
-            TransactionFilter.UNCATEGORIZED -> result.filter { it.categoryId == 1 } 
-        }
-        
-        result
-    }.asLiveData()
-
-    // For Dashboard Stats (Filtered by TimeRange)
-    val dashboardStats: LiveData<DashboardStats> = combine(
-        repository.allTransactions,
-        timeRange
-    ) { transactions, range ->
-        val (start, end) = getTimestampRange(range)
-        val filtered = transactions.filter { 
-            if (range == TimeRange.ALL) true else it.timestamp in start..end 
-        }
-        
-        var income = 0.0
-        var expense = 0.0
-        filtered.forEach {
-            if (it.type == "Received" || it.type == "Deposit") {
-                income += it.amount
-            } else {
-                expense += it.amount
-            }
-        }
-        DashboardStats(income, expense, income - expense, filtered.size)
-    }.asLiveData()
-
-    // Recent Transactions
-    val recentTransactions: LiveData<List<TransactionEntity>> = combine(
-        repository.allTransactions,
-        timeRange
-    ) { transactions, range ->
-        val (start, end) = getTimestampRange(range)
-        transactions
-            .filter { if (range == TimeRange.ALL) true else it.timestamp in start..end }
-            .take(5)
-    }.asLiveData()
-
-    val categorySpending: LiveData<List<CategorySpending>> = repository.categorySpending.asLiveData()
-
-    val topSpendingActors: LiveData<List<ActorSpending>> = timeRange.flatMapLatest { range ->
-        val (start, end) = getTimestampRange(range)
-        repository.getTopSpendingActorsByDate(5, start, end)
-    }.asLiveData()
-
-    val dailySpending: LiveData<List<ChartData>> = repository.allTransactions.map { transactions ->
-        // Group by day (last 7 days)
-        val today = Calendar.getInstance()
-        val days = (0..6).map { 
-            val cal = today.clone() as Calendar
-            cal.add(Calendar.DAY_OF_YEAR, -it)
-            cal
-        }.reversed()
-        
-        days.map { day ->
-            val start = day.clone() as Calendar
-            start.set(Calendar.HOUR_OF_DAY, 0)
-            start.set(Calendar.MINUTE, 0)
-            start.set(Calendar.SECOND, 0)
-            
-            val end = day.clone() as Calendar
-            end.set(Calendar.HOUR_OF_DAY, 23)
-            end.set(Calendar.MINUTE, 59)
-            end.set(Calendar.SECOND, 59)
-            
-            val dayTotal = transactions.filter { 
-                it.timestamp >= start.timeInMillis && it.timestamp <= end.timeInMillis && (it.type != "Received" && it.type != "Deposit")
-            }.sumOf { it.amount }
-            
-            val label = SimpleDateFormat("EEE", Locale.getDefault()).format(day.time)
-            ChartData(label, dayTotal)
-        }
-    }.asLiveData()
-
-    val categories: LiveData<List<CategoryEntity>> = repository.allCategories.asLiveData()
-
-    // Analytics
-    private val analyticsMonth = MutableStateFlow(Calendar.getInstance().get(Calendar.MONTH) + 1)
-    private val analyticsYear = MutableStateFlow(Calendar.getInstance().get(Calendar.YEAR))
-
-    val analyticsCategoryData: LiveData<List<CategoryBudgetProgress>> = combine(
-        analyticsMonth,
-        analyticsYear
-    ) { month: Int, year: Int ->
-        repository.getBudgetProgress(month, year)
-    }.flatMapLatest { it }.asLiveData()
-
-    val analyticsDailyTrend: LiveData<List<ChartData>> = combine(
-        analyticsMonth,
-        analyticsYear,
-        repository.allTransactions
-    ) { month: Int, year: Int, transactions: List<TransactionEntity> ->
-        val filtered = transactions.filter {
-            val cal = Calendar.getInstance()
-            cal.timeInMillis = it.timestamp
-            (cal.get(Calendar.MONTH) + 1) == month && cal.get(Calendar.YEAR) == year &&
-            (it.type != "Received" && it.type != "Deposit")
-        }
-        
-        // Group by day
-        val grouped = filtered.groupBy { 
-            val cal = Calendar.getInstance()
-            cal.timeInMillis = it.timestamp
-            cal.get(Calendar.DAY_OF_MONTH)
-        }
-        
-        // Map to ChartData (Day 1..31)
-        val cal = Calendar.getInstance()
-        cal.set(Calendar.MONTH, month - 1)
-        cal.set(Calendar.YEAR, year)
-        val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-        
-        (1..daysInMonth).map { day ->
-            val amount = grouped[day]?.sumOf { it.amount } ?: 0.0
-            
-            val dayCal = Calendar.getInstance()
-            dayCal.set(Calendar.MONTH, month - 1)
-            dayCal.set(Calendar.YEAR, year)
-            dayCal.set(Calendar.DAY_OF_MONTH, day)
-            val label = SimpleDateFormat("d MMM", Locale.getDefault()).format(dayCal.time)
-            
-            ChartData(label, amount)
-        }
-    }.asLiveData()
-
-    val analyticsSummary: LiveData<DashboardStats> = combine(
-        analyticsMonth,
-        analyticsYear,
-        repository.allTransactions
-    ) { month: Int, year: Int, transactions: List<TransactionEntity> ->
-        val filtered = transactions.filter {
-            val cal = Calendar.getInstance()
-            cal.timeInMillis = it.timestamp
-            (cal.get(Calendar.MONTH) + 1) == month && cal.get(Calendar.YEAR) == year
-        }
-        
-        var income = 0.0
-        var expense = 0.0
-        filtered.forEach {
-            if (it.type == "Received" || it.type == "Deposit") {
-                income += it.amount
-            } else {
-                expense += it.amount
-            }
-        }
-        DashboardStats(income, expense, income - expense, filtered.size)
-    }.asLiveData()
-
-    val analyticsTopActors: LiveData<List<ActorSpending>> = combine(
-        analyticsMonth,
-        analyticsYear
-    ) { month: Int, year: Int ->
-        val cal = Calendar.getInstance()
-        cal.set(Calendar.MONTH, month - 1)
-        cal.set(Calendar.YEAR, year)
-        cal.set(Calendar.DAY_OF_MONTH, 1)
-        cal.set(Calendar.HOUR_OF_DAY, 0)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        val start = cal.timeInMillis
-
-        cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
-        cal.set(Calendar.HOUR_OF_DAY, 23)
-        cal.set(Calendar.MINUTE, 59)
-        cal.set(Calendar.SECOND, 59)
-        val end = cal.timeInMillis
-
-        repository.getTopSpendingActorsByDate(5, start, end)
-    }.flatMapLatest { it }.asLiveData()
-
-    fun setAnalyticsFilter(isThisMonth: Boolean) {
-        val cal = Calendar.getInstance()
-        if (!isThisMonth) {
-            cal.add(Calendar.MONTH, -1)
-        }
-        analyticsMonth.value = cal.get(Calendar.MONTH) + 1
-        analyticsYear.value = cal.get(Calendar.YEAR)
     }
 
     fun setTimeRange(range: TimeRange) {
         timeRange.value = range
     }
 
-    fun setFilterType(filter: TransactionFilter) {
-        filterType.value = filter
-    }
-
-    fun search(query: String) {
-        searchQuery.value = query
+    fun updateTransactionCategory(transactionId: Int, categoryId: Int) {
+        viewModelScope.launch {
+            repository.updateTransactionCategory(transactionId, categoryId)
+        }
     }
 
     // State for Sync Status
@@ -369,12 +121,6 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
             } catch (e: Exception) {
                 _syncStatus.value = SyncResult.Error(e.message)
             }
-        }
-    }
-
-    fun updateTransactionCategory(transactionId: Int, categoryId: Int) {
-        viewModelScope.launch {
-            repository.updateTransactionCategory(transactionId, categoryId)
         }
     }
 

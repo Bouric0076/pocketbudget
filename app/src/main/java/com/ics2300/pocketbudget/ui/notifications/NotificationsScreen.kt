@@ -4,6 +4,7 @@ import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -71,6 +73,10 @@ private enum class NotificationFilter {
     ALL, UNREAD
 }
 
+private enum class TypeFilter {
+    ALL, BILL, TRANSACTION, BUDGET
+}
+
 private data class NotificationUiStyle(
     val iconRes: Int,
     val accent: Color,
@@ -88,13 +94,24 @@ fun NotificationsScreen(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(NotificationFilter.ALL) }
+    var typeFilter by remember { mutableStateOf(TypeFilter.ALL) }
 
     val notifications by viewModel.notifications.asFlow().collectAsState(initial = emptyList())
 
     val unreadCount = notifications.count { !it.isRead }
-    val filtered = when (filter) {
-        NotificationFilter.ALL -> notifications
-        NotificationFilter.UNREAD -> notifications.filter { !it.isRead }
+    
+    val filtered = notifications.filter { notification ->
+        val matchesRead = when (filter) {
+            NotificationFilter.ALL -> true
+            NotificationFilter.UNREAD -> !notification.isRead
+        }
+        val matchesType = when (typeFilter) {
+            TypeFilter.ALL -> true
+            TypeFilter.BILL -> notification.type == "Bill"
+            TypeFilter.TRANSACTION -> notification.type == "Transaction"
+            TypeFilter.BUDGET -> notification.type == "Budget"
+        }
+        matchesRead && matchesType
     }
 
     val grouped = remember(filtered) { groupNotifications(filtered) }
@@ -197,7 +214,9 @@ fun NotificationsScreen(
                 FilterRow(
                     selected = filter,
                     onFilterChanged = { filter = it },
-                    unreadCount = unreadCount
+                    unreadCount = unreadCount,
+                    selectedType = typeFilter,
+                    onTypeFilterChanged = { typeFilter = it }
                 )
             }
 
@@ -212,7 +231,9 @@ fun NotificationsScreen(
                             if (!notification.isRead) {
                                 viewModel.markAsRead(notification)
                             }
-                        }
+                        },
+                        onMarkRead = { viewModel.markAsRead(notification) },
+                        onSnooze = { viewModel.snooze(notification) }
                     )
                 }
             }
@@ -296,44 +317,82 @@ private fun UnreadBanner(
 private fun FilterRow(
     selected: NotificationFilter,
     onFilterChanged: (NotificationFilter) -> Unit,
-    unreadCount: Int
+    unreadCount: Int,
+    selectedType: TypeFilter,
+    onTypeFilterChanged: (TypeFilter) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        FilterChip(
-            selected = selected == NotificationFilter.ALL,
-            onClick = { onFilterChanged(NotificationFilter.ALL) },
-            label = { Text("All") },
-            colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = BrandDarkGreen,
-                selectedLabelColor = Color.White,
-                selectedLeadingIconColor = Color.White
-            ),
-            border = FilterChipDefaults.filterChipBorder(
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            FilterChip(
                 selected = selected == NotificationFilter.ALL,
-                enabled = true,
-                selectedBorderColor = BrandDarkGreen,
-                borderColor = BrandDarkGreen.copy(alpha = 0.2f)
+                onClick = { onFilterChanged(NotificationFilter.ALL) },
+                label = { Text("All") },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = BrandDarkGreen,
+                    selectedLabelColor = Color.White,
+                    selectedLeadingIconColor = Color.White
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    selected = selected == NotificationFilter.ALL,
+                    enabled = true,
+                    selectedBorderColor = BrandDarkGreen,
+                    borderColor = BrandDarkGreen.copy(alpha = 0.2f)
+                )
             )
-        )
 
-        FilterChip(
-            selected = selected == NotificationFilter.UNREAD,
-            onClick = { onFilterChanged(NotificationFilter.UNREAD) },
-            label = { Text("Unread ($unreadCount)") },
-            colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = BrandDarkGreen,
-                selectedLabelColor = Color.White
-            ),
-            border = FilterChipDefaults.filterChipBorder(
+            FilterChip(
                 selected = selected == NotificationFilter.UNREAD,
-                enabled = true,
-                selectedBorderColor = BrandDarkGreen,
-                borderColor = BrandDarkGreen.copy(alpha = 0.2f)
+                onClick = { onFilterChanged(NotificationFilter.UNREAD) },
+                label = { Text("Unread ($unreadCount)") },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = BrandDarkGreen,
+                    selectedLabelColor = Color.White
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    selected = selected == NotificationFilter.UNREAD,
+                    enabled = true,
+                    selectedBorderColor = BrandDarkGreen,
+                    borderColor = BrandDarkGreen.copy(alpha = 0.2f)
+                )
             )
-        )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            TypeFilter.entries.forEach { type ->
+                FilterChip(
+                    selected = selectedType == type,
+                    onClick = { onTypeFilterChanged(type) },
+                    label = { 
+                        Text(
+                            text = when(type) {
+                                TypeFilter.ALL -> "Everything"
+                                TypeFilter.BILL -> "Bills"
+                                TypeFilter.TRANSACTION -> "Transactions"
+                                TypeFilter.BUDGET -> "Budget"
+                            }
+                        ) 
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = BrandSecondaryGreen,
+                        selectedLabelColor = Color.White
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        selected = selectedType == type,
+                        enabled = true,
+                        selectedBorderColor = BrandSecondaryGreen,
+                        borderColor = BrandDarkGreen.copy(alpha = 0.1f)
+                    )
+                )
+            }
+        }
     }
 }
 
@@ -364,7 +423,9 @@ private fun SectionHeader(title: String) {
 @Composable
 private fun NotificationItem(
     notification: NotificationEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onMarkRead: () -> Unit,
+    onSnooze: () -> Unit = {}
 ) {
     val style = notificationStyle(notification.type)
     val titleColor = if (notification.isRead) BrandDarkGreen.copy(alpha = 0.9f) else BrandDarkGreen
@@ -474,13 +535,67 @@ private fun NotificationItem(
                         }
 
                         if (!notification.isRead) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFE53935))
-                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            
+                            // Action buttons for unread notifications
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (notification.type == "Bill") {
+                                    Surface(
+                                        onClick = onSnooze,
+                                        color = BrandDarkGreen.copy(alpha = 0.05f),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(id = R.drawable.ic_popup_reminder),
+                                                contentDescription = null,
+                                                tint = style.accent,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Snooze",
+                                                color = style.accent,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Surface(
+                                    onClick = onMarkRead,
+                                    color = BrandDarkGreen.copy(alpha = 0.05f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = BrandDarkGreen,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Read",
+                                            color = BrandDarkGreen,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
