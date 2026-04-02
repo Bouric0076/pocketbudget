@@ -14,6 +14,7 @@ import com.ics2300.pocketbudget.MainActivity
 import com.ics2300.pocketbudget.MainApplication
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.receivers.NotificationActionReceiver
+import com.ics2300.pocketbudget.data.TransactionEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -66,7 +67,8 @@ object NotificationHelper {
         iconRes: Int = R.drawable.ic_money,
         priority: Int = NotificationCompat.PRIORITY_DEFAULT,
         actionData: String? = null,
-        extraActions: List<NotificationCompat.Action> = emptyList()
+        extraActions: List<NotificationCompat.Action> = emptyList(),
+        groupId: String? = null
     ) {
         val app = context.applicationContext as? MainApplication ?: return
         
@@ -100,6 +102,13 @@ object NotificationHelper {
                 .setPriority(priority)
                 .addAction(android.R.drawable.ic_menu_edit, "Mark Read", markReadPendingIntent)
 
+            if (groupId != null) {
+                builder.setGroup(groupId)
+                
+                // Show summary notification for this group
+                showGroupSummary(context, channelId, groupId)
+            }
+
             // Add extra actions (like Snooze)
             extraActions.forEach { builder.addAction(it) }
 
@@ -107,6 +116,68 @@ object NotificationHelper {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(androidId, builder.build())
         }
+    }
+
+    private fun showGroupSummary(context: Context, channelId: String, groupId: String) {
+        val summaryNotification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.ic_money)
+            .setStyle(NotificationCompat.InboxStyle()
+                .setSummaryText("New M-Pesa transactions"))
+            .setGroup(groupId)
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .build()
+
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(groupId.hashCode(), summaryNotification)
+    }
+
+    fun notifyNewTransaction(context: Context, transaction: TransactionEntity, categoryName: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context, 
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED) {
+                return
+            }
+        }
+
+        val isPrivacyMode = SecurityUtils.isPrivacyModeEnabled(context)
+        val amountStr = CurrencyFormatter.formatKsh(transaction.amount, isPrivacyMode)
+        
+        val title = "New Transaction Detected"
+        val message = "$amountStr to ${transaction.partyName} (Categorized as $categoryName)"
+        
+        // Wrong Category Action
+        val wrongCategoryIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_WRONG_CATEGORY
+            putExtra("transaction_id", transaction.transactionId)
+            putExtra("android_notification_id", transaction.transactionId.hashCode())
+        }
+        val wrongCategoryPendingIntent = PendingIntent.getBroadcast(
+            context, transaction.transactionId.hashCode() + 1, wrongCategoryIntent, 
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        showNotification(
+            context = context,
+            channelId = CHANNEL_TRANSACTIONS,
+            title = title,
+            message = message,
+            type = "Transaction",
+            androidId = transaction.transactionId.hashCode(),
+            iconRes = R.drawable.ic_money,
+            priority = NotificationCompat.PRIORITY_DEFAULT,
+            actionData = transaction.id.toString(),
+            extraActions = listOf(
+                NotificationCompat.Action(
+                    R.drawable.ic_category, 
+                    "Wrong Category?", 
+                    wrongCategoryPendingIntent
+                )
+            ),
+            groupId = "group_mpesa_transactions"
+        )
     }
 
     fun showBillReminder(context: Context, billName: String, amount: Double, daysUntil: Int, isSnoozed: Boolean = false) {
@@ -130,10 +201,12 @@ object NotificationHelper {
         val titleText = if (isSnoozed) "Snoozed: $billName" else "Upcoming Bill: $billName"
         val message = "$amountText is likely due $timeText."
         
-        val snoozeIntent = Intent(context, SnoozeReceiver::class.java).apply {
-            putExtra("notification_id", billName.hashCode())
+        // Snooze Action using NotificationActionReceiver
+        val snoozeIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_SNOOZE
             putExtra("bill_name", billName)
             putExtra("amount", amount)
+            putExtra("android_notification_id", billName.hashCode())
         }
         val snoozePendingIntent = PendingIntent.getBroadcast(
             context, billName.hashCode(), snoozeIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
@@ -156,29 +229,6 @@ object NotificationHelper {
             priority = NotificationCompat.PRIORITY_HIGH,
             actionData = billName,
             extraActions = listOf(snoozeAction)
-        )
-    }
-
-    fun showTransactionNotification(context: Context, title: String, message: String, id: Int) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    context, 
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED) {
-                return
-            }
-        }
-        
-        showNotification(
-            context = context,
-            channelId = CHANNEL_TRANSACTIONS,
-            title = title,
-            message = message,
-            type = "Transaction",
-            androidId = id,
-            iconRes = R.drawable.ic_money,
-            priority = NotificationCompat.PRIORITY_DEFAULT,
-            actionData = id.toString()
         )
     }
 

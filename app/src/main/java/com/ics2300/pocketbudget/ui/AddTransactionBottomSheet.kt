@@ -14,18 +14,17 @@ import com.ics2300.pocketbudget.data.CategoryEntity
 import com.ics2300.pocketbudget.data.TransactionEntity
 import com.ics2300.pocketbudget.databinding.DialogAddTransactionBinding
 import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
-import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModelFactory
 import androidx.fragment.app.activityViewModels
+import dagger.hilt.android.AndroidEntryPoint
 import java.util.UUID
 
+@AndroidEntryPoint
 class AddTransactionBottomSheet : BottomSheetDialogFragment() {
 
     private var _binding: DialogAddTransactionBinding? = null
     private val binding get() = _binding!!
 
-    private val viewModel: DashboardViewModel by activityViewModels {
-        DashboardViewModelFactory((requireActivity().application as MainApplication).repository)
-    }
+    private val viewModel: DashboardViewModel by activityViewModels()
     
     private var selectedCategoryId: Int = 1 // Default Uncategorized
     private var isIncome = false
@@ -88,6 +87,15 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
             }
             
             val amount = amountStr.toDoubleOrNull() ?: 0.0
+            if (amount == 0.0) {
+                binding.layoutAmount.error = "Amount cannot be zero"
+                return@setOnClickListener
+            }
+
+            if (note.isBlank()) {
+                binding.layoutNote.error = "Enter a note"
+                return@setOnClickListener
+            }
             val isRecurring = binding.switchRecurring.isChecked
             
             if (isRecurring) {

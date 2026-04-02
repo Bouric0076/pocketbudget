@@ -1,41 +1,85 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="32dp">
+    android:padding="24dp">
 
-    <ImageView
-        android:id="@+id/img_onboarding"
-        android:layout_width="match_parent"
+    <androidx.cardview.widget.CardView
+        android:id="@+id/card_image_container"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:src="@drawable/ic_launcher_foreground"
-        android:layout_marginBottom="32dp"
-        android:scaleType="fitCenter" />
+        android:layout_marginTop="24dp"
+        app:cardCornerRadius="48dp"
+        app:cardElevation="0dp"
+        app:cardBackgroundColor="@android:color/transparent"
+        app:layout_constraintDimensionRatio="1:1"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/text_title"
+        app:layout_constraintVertical_chainStyle="packed"
+        app:layout_constraintWidth_percent="0.8">
+
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/img_onboarding"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </androidx.cardview.widget.CardView>
 
     <TextView
         android:id="@+id/text_title"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Title"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        android:textColor="@color/brand_dark_green"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="40dp"
         android:gravity="center"
-        android:layout_marginBottom="16dp" />
+        android:text="Title"
+        android:textColor="@color/brand_dark_green"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        android:letterSpacing="-0.03"
+        android:lineHeight="38sp"
+        app:layout_constraintBottom_toTopOf="@+id/text_subtitle"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/card_image_container" />
+
+    <TextView
+        android:id="@+id/text_subtitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="32dp"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:text="Subtitle"
+        android:textColor="@color/brand_light_green"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.15"
+        android:textAllCaps="true"
+        app:layout_constraintBottom_toTopOf="@+id/text_desc"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/text_title" />
 
     <TextView
         android:id="@+id/text_desc"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Description"
-        android:textSize="18sp"
-        android:textColor="@color/text_secondary"
+        android:layout_marginHorizontal="32dp"
+        android:layout_marginTop="20dp"
         android:gravity="center"
-        android:lineSpacingExtra="6dp"
-        android:paddingHorizontal="16dp" />
+        android:lineSpacingExtra="10dp"
+        android:text="Description"
+        android:textColor="@color/text_secondary"
+        android:textSize="17sp"
+        android:alpha="0.8"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/text_subtitle"
+        app:layout_constraintVertical_bias="0" />
 
-</LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

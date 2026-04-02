@@ -20,8 +20,12 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+
 @OptIn(ExperimentalCoroutinesApi::class)
-class AnalyticsViewModel(private val repository: TransactionRepository) : ViewModel() {
+@HiltViewModel
+class AnalyticsViewModel @Inject constructor(private val repository: TransactionRepository) : ViewModel() {
 
     private val analyticsMonth = MutableStateFlow(Calendar.getInstance().get(Calendar.MONTH) + 1)
     private val analyticsYear = MutableStateFlow(Calendar.getInstance().get(Calendar.YEAR))
@@ -149,15 +153,5 @@ class AnalyticsViewModel(private val repository: TransactionRepository) : ViewMo
         }
         analyticsMonth.value = cal.get(Calendar.MONTH) + 1
         analyticsYear.value = cal.get(Calendar.YEAR)
-    }
-}
-
-class AnalyticsViewModelFactory(private val repository: TransactionRepository) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(AnalyticsViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return AnalyticsViewModel(repository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }

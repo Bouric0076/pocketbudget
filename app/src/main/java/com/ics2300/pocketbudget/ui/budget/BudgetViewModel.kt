@@ -15,8 +15,12 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+
 @OptIn(ExperimentalCoroutinesApi::class)
-class BudgetViewModel(private val repository: TransactionRepository) : ViewModel() {
+@HiltViewModel
+class BudgetViewModel @Inject constructor(private val repository: TransactionRepository) : ViewModel() {
 
     private val currentCalendar = Calendar.getInstance()
     val currentMonth = MutableStateFlow(currentCalendar.get(Calendar.MONTH) + 1) // 1-12
@@ -38,12 +42,4 @@ class BudgetViewModel(private val repository: TransactionRepository) : ViewModel
     }
 }
 
-class BudgetViewModelFactory(private val repository: TransactionRepository) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(BudgetViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return BudgetViewModel(repository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
+

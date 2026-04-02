@@ -12,7 +12,9 @@ import com.ics2300.pocketbudget.MainActivity
 import com.ics2300.pocketbudget.R
 
 import android.content.Context
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class SplashActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {

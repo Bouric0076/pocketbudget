@@ -1,7 +1,11 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.hilt)
     id("kotlin-kapt")
 }
 
@@ -21,10 +25,14 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("release.keystore")
-            storePassword = "password"
-            keyAlias = "pocketbudget"
-            keyPassword = "password"
+            val keystorePropertiesFile = file("keystore.properties")
+            val keystoreProperties = Properties()
+            keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+
+            storeFile = file(keystoreProperties.getProperty("storeFile", "release.keystore"))
+            storePassword = keystoreProperties.getProperty("storePassword")
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
         }
     }
 
@@ -79,6 +87,10 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     kapt(libs.androidx.room.compiler)
 
+    // Hilt
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)
+
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     
@@ -88,11 +100,19 @@ dependencies {
     // Security Crypto
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
+    // SQLCipher for Room encryption
+    implementation("net.zetetic:android-database-sqlcipher:4.5.3")
+
+    // Google Play Services for SMS Retriever API
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
+
+    // Coil for image loading
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    kapt(libs.hilt.compiler)
+    implementation(libs.hilt.android)
 }

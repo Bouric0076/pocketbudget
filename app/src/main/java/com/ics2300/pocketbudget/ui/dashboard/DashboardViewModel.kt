@@ -24,7 +24,11 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import com.ics2300.pocketbudget.domain.usecase.SyncTransactionsUseCase
 
+@OptIn(ExperimentalCoroutinesApi::class)
 enum class TimeRange {
     DAY, WEEK, MONTH, YEAR, ALL
 }
@@ -34,7 +38,11 @@ enum class TransactionFilter {
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class DashboardViewModel(private val repository: TransactionRepository) : ViewModel() {
+@HiltViewModel
+class DashboardViewModel @Inject constructor(
+    private val repository: TransactionRepository,
+    private val syncTransactionsUseCase: SyncTransactionsUseCase
+) : ViewModel() {
 
     private val timeRange = MutableStateFlow(TimeRange.DAY)
 
@@ -108,6 +116,12 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
         }
     }
 
+    fun bulkCategorizeSimilarTransactions(partyName: String, categoryId: Int) {
+        viewModelScope.launch {
+            repository.bulkCategorizeSimilarTransactions(partyName, categoryId)
+        }
+    }
+
     // State for Sync Status
     private val _syncStatus = MutableLiveData<SyncResult>()
     val syncStatus: LiveData<SyncResult> = _syncStatus
@@ -116,7 +130,7 @@ class DashboardViewModel(private val repository: TransactionRepository) : ViewMo
         viewModelScope.launch {
             _syncStatus.value = SyncResult.Loading
             try {
-                val count = repository.syncTransactions()
+                val count = syncTransactionsUseCase()
                 _syncStatus.value = SyncResult.Success(count)
             } catch (e: Exception) {
                 _syncStatus.value = SyncResult.Error(e.message)
@@ -165,14 +179,4 @@ sealed class SyncResult {
     object Loading : SyncResult()
     data class Success(val count: Int) : SyncResult()
     data class Error(val message: String?) : SyncResult()
-}
-
-class DashboardViewModelFactory(private val repository: TransactionRepository) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(DashboardViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return DashboardViewModel(repository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
 }

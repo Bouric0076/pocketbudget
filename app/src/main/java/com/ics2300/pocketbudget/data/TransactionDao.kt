@@ -4,11 +4,16 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TransactionDao {
     // Transaction Methods
+    @Transaction
+    @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
+    fun getTransactionsWithCategory(): Flow<List<TransactionWithCategory>>
+
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
     fun getAllTransactions(): Flow<List<TransactionEntity>>
 
@@ -36,7 +41,7 @@ interface TransactionDao {
             :filterType = 'ALL' 
             OR (:filterType = 'INCOME' AND (type IN ('Received', 'Deposit')))
             OR (:filterType = 'EXPENSE' AND (type NOT IN ('Received', 'Deposit')))
-            OR (:filterType = 'UNCATEGORIZED' AND categoryId = 1)
+            OR (:filterType = 'UNCATEGORIZED' AND (categoryId IS NULL OR categoryId IN (SELECT id FROM categories WHERE name = 'Uncategorized')))
         )
         ORDER BY timestamp DESC
     """)

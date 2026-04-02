@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_modal_modern"
+    android:paddingHorizontal="28dp"
+    android:paddingTop="32dp"
+    android:paddingBottom="36dp">
+
+    <!-- Header Section with Sophisticated Icon -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:layout_marginBottom="28dp">
+
+        <FrameLayout
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:background="@drawable/bg_icon_modern"
+            android:padding="18dp"
+            android:layout_marginBottom="20dp">
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_category"
+                app:tint="@color/brand_dark_green" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Smart Categorization"
+            android:textColor="@color/brand_dark_green"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:letterSpacing="-0.02" />
+            
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="POWERED BY BEHAVIORAL LEARNING"
+            android:textColor="@color/brand_light_green"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.15"
+            android:layout_marginTop="4dp" />
+    </LinearLayout>
+
+    <!-- Message Body with Better Spacing and Typography -->
+    <TextView
+        android:id="@+id/text_bulk_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="We noticed multiple similar transactions. Would you like us to automatically organize all of them for you?"
+        android:textColor="@color/text_secondary"
+        android:textSize="16sp"
+        android:lineSpacingExtra="8dp"
+        android:gravity="center"
+        android:alpha="0.85"
+        android:layout_marginBottom="32dp" />
+
+    <!-- Modern Stacked Actions for Mobile Reachability -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_bulk_all"
+        style="@style/Widget.Material3.Button"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="Categorize All Similar"
+        android:backgroundTint="@color/brand_dark_green"
+        android:textColor="@color/white"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:letterSpacing="0.01"
+        app:cornerRadius="28dp"
+        app:elevation="2dp"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_just_one"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="Only This Transaction"
+        android:textColor="@color/text_secondary"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        app:cornerRadius="26dp" />
+
+</LinearLayout>

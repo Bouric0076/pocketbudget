@@ -31,6 +31,20 @@
     <color name="chart_grid_line">#EEEEEE</color>
     <color name="chart_axis_text">#9E9E9E</color>
 
+    <!-- Chart & Category Colors -->
+    <color name="chart_color_1">#3498db</color>
+    <color name="chart_color_2">#e74c3c</color>
+    <color name="chart_color_3">#2ecc71</color>
+    <color name="chart_color_4">#f1c40f</color>
+    <color name="chart_color_5">#9b59b6</color>
+    <color name="chart_color_6">#1abc9c</color>
+    <color name="chart_color_7">#e67e22</color>
+    <color name="chart_color_8">#34495e</color>
+    <color name="chart_color_9">#d35400</color>
+    <color name="chart_color_10">#c0392b</color>
+    <color name="chart_color_11">#2980b9</color>
+    <color name="chart_color_12">#27ae60</color>
+
     <!-- Legacy Colors (kept for compatibility if needed) -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#0A3D2E</color> <!-- Replaced with brand dark -->

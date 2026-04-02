@@ -229,9 +229,11 @@ object MpesaParser {
 
         val date: String
         val time: String
+        var accountName: String? = null
         
         if (hasAccount) {
             // Groups: 1=ID, 2=Amount, 3=Party, 4=Account, 5=Date, 6=Time
+            accountName = matcher.group(4) ?: ""
             date = matcher.group(5) ?: ""
             time = matcher.group(6) ?: ""
         } else {
@@ -245,6 +247,7 @@ object MpesaParser {
             amount = amountStr.toDouble(),
             type = type,
             partyName = party,
+            accountName = accountName,
             timestamp = parseDate(date, time),
             categoryId = null
         )

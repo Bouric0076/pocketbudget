@@ -86,6 +86,15 @@
                     android:inputType="text"/>
                     
                 <ImageView
+                    android:id="@+id/btn_sort"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@android:drawable/ic_menu_sort_by_size"
+                    android:padding="12dp"
+                    app:tint="@color/white"
+                    android:background="?android:attr/selectableItemBackground"/>
+
+                <ImageView
                     android:id="@+id/btn_filter_advanced"
                     android:layout_width="48dp"
                     android:layout_height="48dp"

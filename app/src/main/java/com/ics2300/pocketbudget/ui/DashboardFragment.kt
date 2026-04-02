@@ -23,10 +23,10 @@ import com.ics2300.pocketbudget.databinding.FragmentDashboardBinding
 import com.ics2300.pocketbudget.ui.dashboard.ActorSpendingAdapter
 import com.ics2300.pocketbudget.data.DashboardStats
 import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModel
-import com.ics2300.pocketbudget.ui.dashboard.DashboardViewModelFactory
 import com.ics2300.pocketbudget.ui.dashboard.TimeRange
 import com.ics2300.pocketbudget.utils.CurrencyFormatter
 import com.ics2300.pocketbudget.utils.TransactionGrouper
+import com.ics2300.pocketbudget.ui.TransactionListItem
 
 import com.google.android.material.snackbar.Snackbar
 import com.ics2300.pocketbudget.ui.dashboard.SyncResult
@@ -34,14 +34,15 @@ import com.ics2300.pocketbudget.utils.AnalyticsUtils
 import com.ics2300.pocketbudget.utils.SecurityUtils
 import java.util.Calendar
 
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
 class DashboardFragment : Fragment() {
 
     private var _binding: FragmentDashboardBinding? = null
     private val binding get() = _binding!!
 
-    private val viewModel: DashboardViewModel by viewModels {
-        DashboardViewModelFactory((requireActivity().application as MainApplication).repository)
-    }
+    private val viewModel: DashboardViewModel by viewModels()
 
     private val requestPermissionsLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -283,7 +284,11 @@ class DashboardFragment : Fragment() {
         binding.recyclerRecentTransactions.layoutManager = LinearLayoutManager(context)
         
         viewModel.recentTransactions.observe(viewLifecycleOwner) { transactions ->
-            val items = transactions.map { TransactionListItem.Transaction(it) }
+            val categories = viewModel.categories.value
+            val items = transactions.map { transaction ->
+                val category = categories?.find { it.id == transaction.categoryId }
+                TransactionListItem.Transaction(transaction, category)
+            }
             adapter.submitList(items)
             
             if (transactions.isEmpty()) {
@@ -324,9 +329,14 @@ class DashboardFragment : Fragment() {
         
         val bottomSheet = CategorySelectionBottomSheet(
             categories,
-            transaction.categoryId ?: -1
-        ) { selectedCategory ->
-            viewModel.updateTransactionCategory(transaction.id, selectedCategory.id)
+            transaction.categoryId ?: -1,
+            transaction.partyName
+        ) { selectedCategory, isBulk ->
+            if (isBulk) {
+                viewModel.bulkCategorizeSimilarTransactions(transaction.partyName, selectedCategory.id)
+            } else {
+                viewModel.updateTransactionCategory(transaction.id, selectedCategory.id)
+            }
         }
         bottomSheet.show(parentFragmentManager, CategorySelectionBottomSheet.TAG)
     }

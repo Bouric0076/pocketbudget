@@ -3,7 +3,26 @@ package com.ics2300.pocketbudget.utils
 import android.graphics.Color
 import com.ics2300.pocketbudget.R
 
+import com.ics2300.pocketbudget.data.CategoryEntity
+
 object CategoryUtils {
+
+    fun getDefaultCategories(): List<CategoryEntity> {
+        return listOf(
+            CategoryEntity(name = "Uncategorized", keywords = "UNCATEGORIZED", colorHex = getDefaultColorHex(0)),
+            CategoryEntity(name = "Food & Dining", keywords = "HOTEL,CAFE,RESTAURANT,JAVA,KFC,PIZZA,BURGER,CHICKEN,INN,GALITOS,PIZZA INN,CREAMY INN,SUBWAY,ARTCAFFE,BIG SQUARE,SIMBA SALOON,CARNIVORE,MAMA ASHANTI,CATERING,KIBANDA,EATERY,DINING,DELI,BAKERY,CAKES,SWEET,DESSERT", colorHex = getDefaultColorHex(1)),
+            CategoryEntity(name = "Groceries", keywords = "SUPERMARKET,MART,NAIVAS,QUICKMART,CARREFOUR,CHANDARANA,TUSKYS,UCHUMI,SHOPRITE,GLACIER,CLEAN SHELF,MULLYS,MAGUNAS,PROVISIONS,VEGETABLES,MAMA MBOGA,GREEN GROCER,BUTCHERY,MEAT,MILK,DAIRY", colorHex = getDefaultColorHex(2)),
+            CategoryEntity(name = "Transport", keywords = "UBER,BOLT,MATATU,SHELL,TOTAL,RUBIS,PETROL,STATION,GAS,FARAS,LITTLE CAB,EASY COACH,MASH,DREAMLINE,MODERN COAST,TAHSMEED,GUARDIAN,SWVL,PARKING,GARAGE,AUTO,SPARE,MECHANIC,TYRE,SERVICE,CAB,TAXIFY,BODA,MOTOR", colorHex = getDefaultColorHex(3)),
+            CategoryEntity(name = "Utilities & Bills", keywords = "KPLC,TOKEN,ZUKU,SAFARICOM,AIRTEL,INTERNET,WIFI,POWER,TELKOM,FAIBA,LIQUID,DSTV,GOTV,STARTIMES,WATER,SEWERAGE,NAIROBI WATER,PREPAID,POSTPAID,KRA,TAX,COUNCIL,LICENSE,PERMIT,BILL,SUBSCRIPTION", colorHex = getDefaultColorHex(4)),
+            CategoryEntity(name = "Entertainment", keywords = "NETFLIX,CINEMA,MOVIE,SHOWMAX,SPOTIFY,YOUTUBE,BET,GAMING,XBOX,PLAYSTATION,STEAM,NINTENDO,PUB,LOUNGE,BAR,CLUB,TICKET,EVENT,CONCERT,PARTY,DRINKS,WINES,SPIRITS,LIQUOR", colorHex = getDefaultColorHex(5)),
+            CategoryEntity(name = "Shopping", keywords = "CLOTHING,MALL,FASHION,STORE,SHOP,JUMIA,KILIMALL,AMAZON,SHEIN,ALIBABA,ALIEXPRESS,ADIDAS,NIKE,ZARA,H&M,DECATHLON,PIGIA ME,ELECTRONICS,MOBILE,PHONE,LAPTOP,GADGET,WEAR,BOUTIQUE,COSMETICS,BEAUTY,SALON,BARBER,SPA", colorHex = getDefaultColorHex(6)),
+            CategoryEntity(name = "Health & Wellness", keywords = "HOSPITAL,CHEMIST,PHARMACY,DOCTOR,CLINIC,MEDIC,DENTAL,OPTICAL,NHIF,SHA,AAR,OLD MUTUAL,BRITAM,JUBILEE,GETRUDES,MP SHAH,AGA KHAN,KAREN HOSPITAL,MATERNITY,LAB,GYM,FITNESS,WELLNESS,SPA,THERAPY", colorHex = getDefaultColorHex(7)),
+            CategoryEntity(name = "Rent & Home", keywords = "RENT,LANDLORD,HOUSING,ESTATE,APARTMENT,REALTY,MORTGAGE,SERVICE CHARGE,FURNITURE,HARDWARE,CONSTRUCTION,PAINT,ELECTRICAL,PLUMBING,CLEANING,LAUNDRY,HOME,DECOR,MESS,HOUSE", colorHex = getDefaultColorHex(8)),
+            CategoryEntity(name = "Education", keywords = "SCHOOL,COLLEGE,UNIVERSITY,FEES,TUITION,ACADEMY,KINDERGARTEN,UDEMY,COURSERA,EDX,KHAN ACADEMY,STRATHMORE,USIU,UON,KU,JKUAT,BOOKS,STATIONERY,LIBRARY,EXAM,COUNCIL", colorHex = getDefaultColorHex(9)),
+            CategoryEntity(name = "Transfer & Cash", keywords = "SENT,TRANSFER,MPESA,POCHI,LA BIASHARA,TILL,PAYBILL,WESTERN UNION,MONEYGRAM,REMITLY,WORLDREMIT,WITHDRAW,AGENT,ATM,CASH,M-SHWARI,DEPOSIT,KCB,COOP,EQUITY,ABSA,STANCHART,NCBA,FAMILY BANK,I&M,DTB,BANK", colorHex = getDefaultColorHex(10)),
+            CategoryEntity(name = "Income", keywords = "RECEIVED,DEPOSIT,SALARY,DIVIDEND,INTEREST,REFUND,COMMISSION,BONUS,STIPEND,PAYOUT,CASHBACK,GIFT,REWARD", colorHex = getDefaultColorHex(11))
+        )
+    }
 
     val availableColors = listOf(
         "#0A3D2E", // Brand Dark Green
@@ -55,5 +74,9 @@ object CategoryUtils {
         } catch (e: Exception) {
             Color.parseColor("#0A3D2E") // Default
         }
+    }
+
+    fun getDefaultColorHex(index: Int): String {
+        return availableColors[index % availableColors.size]
     }
 }

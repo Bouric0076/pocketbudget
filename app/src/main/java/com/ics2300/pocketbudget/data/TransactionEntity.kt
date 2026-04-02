@@ -6,7 +6,7 @@ import androidx.room.Index
 
 @Entity(
     tableName = "transactions",
-    indices = [Index(value = ["transactionId"], unique = true)]
+    indices = [Index(value = ["transactionId"], unique = true), Index(value = ["timestamp"]), Index(value = ["categoryId"])]
 )
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -16,6 +16,7 @@ data class TransactionEntity(
     val partyName: String,
     val timestamp: Long,
     val categoryId: Int?,
+    val accountName: String? = null, // Extra metadata for Paybills (e.g. account forEasyTalk)
     val balanceAfter: Double? = null,
     val transactionCost: Double? = null,
     val fullSmsBody: String? = null

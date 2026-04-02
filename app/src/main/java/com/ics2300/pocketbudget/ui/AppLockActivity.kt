@@ -13,7 +13,9 @@ import com.ics2300.pocketbudget.utils.SecurityUtils
 import java.util.concurrent.Executor
 
 import com.ics2300.pocketbudget.utils.AppLockManager
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class AppLockActivity : AppCompatActivity() {
 
     private lateinit var executor: Executor

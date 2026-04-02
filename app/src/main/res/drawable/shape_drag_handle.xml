@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- res/drawable/shape_drag_handle.xml -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/brand_dark_green" />
+    <corners android:radius="2dp" />
+    <size
+        android:width="40dp"
+        android:height="4dp" />
+</shape>

@@ -1,3 +1,21 @@
 <resources>
     <string name="app_name">pocketbudget</string>
+    <string name="privacy_policy_title">Privacy Policy</string>
+    <string name="privacy_policy_content">
+        <b>Last Updated: 2026-04-02</b>\n\n
+        PocketBudget is committed to protecting your privacy. This policy explains how we handle your data.\n\n
+        <b>1. Information Collection</b>\n
+        We only collect information that you explicitly provide and that is necessary for the app to function. This includes:\n
+        • <b>SMS Access:</b> We use the SMS permission solely to automatically read and categorize your M-Pesa transactions. This helps you track your expenses without any manual entry.\n
+        • <b>Device Information:</b> We do not collect or upload any device information or personal identification.\n\n
+        <b>2. Local Storage &amp; Security</b>\n
+        • <b>All financial data stays locally on your device.</b> We do not have any servers, and we do not upload your data to any cloud service.\n
+        • <b>Database Encryption:</b> Your local database is encrypted using SQLCipher to ensure that your financial data is secure even if your device is compromised.\n\n
+        <b>3. Third-Party Services</b>\n
+        We do not share any data with third-party services. The app is completely offline-first.\n\n
+        <b>4. Your Control</b>\n
+        You have full control over your data. You can delete all your data at any time through the settings menu.\n\n
+        <b>5. Contact Us</b>\n
+        If you have any questions or concerns about this policy, please contact us at support@ics2300.pocketbudget.
+    </string>
 </resources>

@@ -1,5 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- res/drawable/selector_dot_indicator.xml -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_selected="true" android:drawable="@drawable/dot_selected" />
-    <item android:drawable="@drawable/dot_unselected" />
+
+    <!-- Selected state: wide pill in brand green -->
+    <item android:state_selected="true">
+        <layer-list>
+            <item android:gravity="center">
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/brand_dark_green" />
+                    <corners android:radius="4dp" />
+                    <size
+                        android:width="20dp"
+                        android:height="8dp" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+    <!-- Default state: small circle, muted green -->
+    <item>
+        <layer-list>
+            <item android:gravity="center">
+                <shape android:shape="oval">
+                    <solid android:color="@color/brand_light_green" />
+                    <size
+                        android:width="8dp"
+                        android:height="8dp" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
 </selector>

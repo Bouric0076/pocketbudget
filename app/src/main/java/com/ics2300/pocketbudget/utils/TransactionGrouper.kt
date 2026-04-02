@@ -1,7 +1,7 @@
 package com.ics2300.pocketbudget.utils
 
 import android.text.format.DateUtils
-import com.ics2300.pocketbudget.data.TransactionEntity
+import com.ics2300.pocketbudget.data.TransactionWithCategory
 import com.ics2300.pocketbudget.ui.TransactionListItem
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -10,19 +10,19 @@ import java.util.Locale
 
 object TransactionGrouper {
 
-    fun groupTransactions(transactions: List<TransactionEntity>): List<TransactionListItem> {
+    fun groupTransactions(transactions: List<TransactionWithCategory>): List<TransactionListItem> {
         val groupedList = mutableListOf<TransactionListItem>()
-        val sortedTransactions = transactions.sortedByDescending { it.timestamp }
+        val sortedTransactions = transactions.sortedByDescending { it.transaction.timestamp }
 
         var lastHeader = ""
 
         for (transaction in sortedTransactions) {
-            val header = getHeaderForTimestamp(transaction.timestamp)
+            val header = getHeaderForTimestamp(transaction.transaction.timestamp)
             if (header != lastHeader) {
                 groupedList.add(TransactionListItem.Header(header))
                 lastHeader = header
             }
-            groupedList.add(TransactionListItem.Transaction(transaction))
+            groupedList.add(TransactionListItem.Transaction(transaction.transaction, transaction.category))
         }
 
         return groupedList

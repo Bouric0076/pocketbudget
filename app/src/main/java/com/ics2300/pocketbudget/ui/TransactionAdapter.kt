@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.TransactionEntity
 import com.ics2300.pocketbudget.databinding.ItemTransactionBinding
+import com.ics2300.pocketbudget.utils.CategoryUtils
 import com.ics2300.pocketbudget.utils.CurrencyFormatter
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,7 +45,7 @@ class TransactionAdapter(private val onTransactionClick: (TransactionEntity) -> 
         val item = getItem(position)
         when (holder) {
             is HeaderViewHolder -> holder.bind((item as TransactionListItem.Header).title)
-            is TransactionViewHolder -> holder.bind((item as TransactionListItem.Transaction).transaction)
+            is TransactionViewHolder -> holder.bind((item as TransactionListItem.Transaction))
         }
     }
 
@@ -58,7 +59,10 @@ class TransactionAdapter(private val onTransactionClick: (TransactionEntity) -> 
         private val binding: ItemTransactionBinding,
         private val onClick: (TransactionEntity) -> Unit
     ) : RecyclerView.ViewHolder(binding.root) {
-        fun bind(transaction: TransactionEntity) {
+        fun bind(transactionItem: TransactionListItem.Transaction) {
+            val transaction = transactionItem.transaction
+            val category = transactionItem.category
+
             binding.root.setOnClickListener { onClick(transaction) }
             binding.textPartyName.text = transaction.partyName
             
@@ -70,7 +74,7 @@ class TransactionAdapter(private val onTransactionClick: (TransactionEntity) -> 
             binding.textDate.text = sdf.format(Date(transaction.timestamp))
             binding.textType.text = transaction.type
             
-            // Set icon and color based on type
+            // Set icon and colors based on type
             when (transaction.type.lowercase()) {
                 "received", "deposit" -> {
                     binding.imgTransactionIcon.setImageResource(android.R.drawable.stat_sys_download)
@@ -79,7 +83,7 @@ class TransactionAdapter(private val onTransactionClick: (TransactionEntity) -> 
                 }
                 else -> {
                     binding.imgTransactionIcon.setImageResource(android.R.drawable.ic_menu_send)
-                    binding.imgTransactionIcon.setColorFilter(binding.root.context.getColor(R.color.status_error)) // Red for spent
+                    binding.imgTransactionIcon.setColorFilter(binding.root.context.getColor(R.color.status_error))
                     binding.textAmount.setTextColor(binding.root.context.getColor(R.color.text_primary))
                 }
             }

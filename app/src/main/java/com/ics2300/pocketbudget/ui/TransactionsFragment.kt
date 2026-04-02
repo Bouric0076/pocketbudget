@@ -6,6 +6,7 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -15,10 +16,9 @@ import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.TransactionEntity
 import com.ics2300.pocketbudget.databinding.FragmentTransactionsBinding
 import com.ics2300.pocketbudget.ui.transactions.TransactionsViewModel
-import com.ics2300.pocketbudget.ui.transactions.TransactionsViewModelFactory
+import com.ics2300.pocketbudget.ui.transactions.SortType
 import com.ics2300.pocketbudget.ui.dashboard.TransactionFilter
 import com.ics2300.pocketbudget.ui.budget.BudgetViewModel
-import com.ics2300.pocketbudget.ui.budget.BudgetViewModelFactory
 import com.ics2300.pocketbudget.utils.TransactionGrouper
 
 import com.google.android.material.datepicker.MaterialDatePicker
@@ -26,18 +26,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
 class TransactionsFragment : Fragment() {
 
     private var _binding: FragmentTransactionsBinding? = null
     private val binding get() = _binding!!
 
-    private val viewModel: TransactionsViewModel by viewModels {
-        TransactionsViewModelFactory((requireActivity().application as MainApplication).repository)
-    }
+    private val viewModel: TransactionsViewModel by viewModels()
 
-    private val budgetViewModel: BudgetViewModel by viewModels {
-        BudgetViewModelFactory((requireActivity().application as MainApplication).repository)
-    }
+    private val budgetViewModel: BudgetViewModel by viewModels()
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -52,7 +51,7 @@ class TransactionsFragment : Fragment() {
         binding.recyclerviewTransactions.adapter = adapter
         binding.recyclerviewTransactions.layoutManager = LinearLayoutManager(context)
 
-        viewModel.allTransactions.observe(viewLifecycleOwner) { transactions ->
+        viewModel.transactionsWithCategory.observe(viewLifecycleOwner) { transactions ->
             transactions?.let { 
                 val groupedList = TransactionGrouper.groupTransactions(it)
                 adapter.submitList(groupedList) 
@@ -196,14 +195,38 @@ class TransactionsFragment : Fragment() {
         }
     }
 
+    private fun setupSort() {
+        binding.btnSort.setOnClickListener {
+            val sortTypes = arrayOf("Date (Newest First)", "Date (Oldest First)", "Amount (High to Low)", "Amount (Low to High)")
+            AlertDialog.Builder(requireContext())
+                .setTitle("Sort By")
+                .setItems(sortTypes) { _, which ->
+                    val sortType = when (which) {
+                        0 -> SortType.DATE_DESC
+                        1 -> SortType.DATE_ASC
+                        2 -> SortType.AMOUNT_DESC
+                        3 -> SortType.AMOUNT_ASC
+                        else -> SortType.DATE_DESC
+                    }
+                    viewModel.setSortType(sortType)
+                }
+                .show()
+        }
+    }
+
     private fun showCategorySelectionDialog(transaction: TransactionEntity) {
         val categories = budgetViewModel.categories.value ?: return
         
         val bottomSheet = CategorySelectionBottomSheet(
             categories,
-            transaction.categoryId ?: -1
-        ) { selectedCategory ->
-            viewModel.updateTransactionCategory(transaction.id, selectedCategory.id)
+            transaction.categoryId ?: -1,
+            transaction.partyName
+        ) { selectedCategory, isBulk ->
+            if (isBulk) {
+                viewModel.bulkCategorizeSimilarTransactions(transaction.partyName, selectedCategory.id)
+            } else {
+                viewModel.updateTransactionCategory(transaction.id, selectedCategory.id)
+            }
         }
         bottomSheet.show(parentFragmentManager, CategorySelectionBottomSheet.TAG)
     }

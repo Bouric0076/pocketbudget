@@ -24,7 +24,17 @@ import com.ics2300.pocketbudget.utils.SecurityUtils
 
 import com.ics2300.pocketbudget.utils.AppLockManager
 
+import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
+import kotlinx.coroutines.MainScope
+
+@HiltAndroidApp
 class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
+
+    @Inject lateinit var repository: TransactionRepository
+    @Inject lateinit var notificationRepository: NotificationRepository
+    
+    val applicationScope = MainScope()
 
     private var activityReferences = 0
     private var isActivityChangingConfigurations = false
@@ -33,27 +43,6 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
     fun resetBackgroundTime() {
         // Legacy support if needed, but primarily handled by AppLockManager
         AppLockManager.unlockSession()
-    }
-
-    val database by lazy { 
-        Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java, "pocket-budget-database"
-        )
-        .fallbackToDestructiveMigration() // Simplified for dev; use migrations in prod
-        .build() 
-    }
-    
-    val repository by lazy { 
-        TransactionRepository(
-            applicationContext,
-            database.transactionDao(), 
-            SmsReader(applicationContext)
-        ) 
-    }
-
-    val notificationRepository by lazy {
-        NotificationRepository(database.notificationDao())
     }
 
     override fun onCreate() {
@@ -65,6 +54,12 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
         scheduleBudgetWatcher()
         
         registerActivityLifecycleCallbacks(this)
+        repository.startSmsListener(applicationScope)
+
+        Thread.setDefaultUncaughtExceptionHandler { _, e -> 
+            // In a real app, you'd want to log this to a remote service
+            e.printStackTrace()
+        }
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}

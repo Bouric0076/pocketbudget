@@ -10,12 +10,22 @@ import com.ics2300.pocketbudget.data.TransactionRepository
 import com.ics2300.pocketbudget.ui.dashboard.TransactionFilter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import com.ics2300.pocketbudget.data.TransactionWithCategory
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalCoroutinesApi::class)
-class TransactionsViewModel(private val repository: TransactionRepository) : ViewModel() {
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+
+enum class SortType {
+    DATE_DESC, DATE_ASC, AMOUNT_DESC, AMOUNT_ASC, ALPHABETICAL
+}
+
+data class Filters(val min: Double?, val max: Double?, val actor: String?, val sort: SortType)
+
+@HiltViewModel
+class TransactionsViewModel @Inject constructor(private val repository: TransactionRepository) : ViewModel() {
 
     private val searchQuery = MutableStateFlow("")
     private val filterType = MutableStateFlow(TransactionFilter.ALL)
@@ -23,28 +33,66 @@ class TransactionsViewModel(private val repository: TransactionRepository) : Vie
     val minAmountFilter = MutableStateFlow<Double?>(null)
     val maxAmountFilter = MutableStateFlow<Double?>(null)
     val selectedActorFilter = MutableStateFlow<String?>(null)
+    private val sortType = MutableStateFlow(SortType.DATE_DESC)
 
-    val allTransactions: LiveData<List<TransactionEntity>> = combine(
-        combine(searchQuery, filterType, dateRangeFilter) { query, filter, dateRange ->
-            Triple(query, filter, dateRange)
-        },
-        combine(minAmountFilter, maxAmountFilter, selectedActorFilter) { min, max, actor ->
-            Triple(min, max, actor)
+    val transactionsWithCategory: LiveData<List<com.ics2300.pocketbudget.data.TransactionWithCategory>> = combine(
+        repository.transactionsWithCategory,
+        searchQuery,
+        filterType,
+        dateRangeFilter,
+        combine(minAmountFilter, maxAmountFilter, selectedActorFilter, sortType) { min, max, actor, sort ->
+            Filters(min, max, actor, sort)
         }
-    ) { basicFilters, advancedFilters ->
-        val (query, filter, dateRange) = basicFilters
-        val (minAmount, maxAmount, actor) = advancedFilters
-        
-        repository.getFilteredTransactions(
-            query,
-            dateRange?.first,
-            dateRange?.second,
-            minAmount,
-            maxAmount,
-            actor,
-            filter.name
-        )
-    }.flatMapLatest { it }.asLiveData()
+    ) { transactions, query, filter, dateRange, filters ->
+        val (min, max, actor, sort) = filters
+        var filteredList = transactions
+
+        if (query.isNotBlank()) {
+            filteredList = filteredList.filter {
+                it.transaction.partyName.contains(query, ignoreCase = true) ||
+                        (it.transaction.fullSmsBody?.contains(query, ignoreCase = true) == true) ||
+                        (it.category?.name?.contains(query, ignoreCase = true) == true)
+            }
+        }
+
+        filteredList = when (filter) {
+            TransactionFilter.INCOME -> filteredList.filter { it.transaction.amount > 0 }
+            TransactionFilter.EXPENSE -> filteredList.filter { it.transaction.amount < 0 }
+            TransactionFilter.UNCATEGORIZED -> filteredList.filter { it.category?.name?.equals("Uncategorized", ignoreCase = true) == true || it.transaction.categoryId == null }
+            else -> filteredList
+        }
+
+        dateRange?.let { (start, end) ->
+            filteredList = filteredList.filter { it.transaction.timestamp in start..end }
+        }
+
+        min?.let { minValue ->
+            filteredList = filteredList.filter { Math.abs(it.transaction.amount) >= minValue }
+        }
+
+        max?.let { maxValue ->
+            filteredList = filteredList.filter { Math.abs(it.transaction.amount) <= maxValue }
+        }
+
+        actor?.let { actorValue ->
+            filteredList = filteredList.filter { it.transaction.partyName == actorValue }
+        }
+
+        // Apply sorting
+        filteredList = when (sort) {
+            SortType.DATE_DESC -> filteredList.sortedByDescending { it.transaction.timestamp }
+            SortType.DATE_ASC -> filteredList.sortedBy { it.transaction.timestamp }
+            SortType.AMOUNT_DESC -> filteredList.sortedByDescending { Math.abs(it.transaction.amount) }
+            SortType.AMOUNT_ASC -> filteredList.sortedBy { Math.abs(it.transaction.amount) }
+            SortType.ALPHABETICAL -> filteredList.sortedBy { it.transaction.partyName }
+        }
+
+        filteredList
+    }.asLiveData()
+
+    fun setSortType(sort: SortType) {
+        sortType.value = sort
+    }
 
     fun search(query: String) {
         searchQuery.value = query
@@ -77,6 +125,12 @@ class TransactionsViewModel(private val repository: TransactionRepository) : Vie
     fun updateTransactionCategory(transactionId: Int, categoryId: Int) {
         viewModelScope.launch {
             repository.updateTransactionCategory(transactionId, categoryId)
+        }
+    }
+
+    fun bulkCategorizeSimilarTransactions(partyName: String, categoryId: Int) {
+        viewModelScope.launch {
+            repository.bulkCategorizeSimilarTransactions(partyName, categoryId)
         }
     }
 }
