@@ -365,6 +365,9 @@ class SettingsFragment : Fragment() {
         // Observe Categories to ensure they are loaded for the management dialog
         viewModel.categories.observe(viewLifecycleOwner) { /* Keep LiveData active */ }
 
+        // Set App Version Dynamically from BuildConfig
+        binding.textViewVersionNumber.text = "v${BuildConfig.VERSION_NAME}"
+
         return root
     }
 
