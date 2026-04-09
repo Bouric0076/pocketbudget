@@ -3,10 +3,15 @@
 PocketBudget KE helps you track spending from M-Pesa messages and understand where your money goes.
 
 ## Download the App
+
+[![Downloads](https://img.shields.io/github/downloads/Bouric0076/pocketbudget/total.svg)](https://github.com/Bouric0076/pocketbudget/releases)
+
 - Testing builds are available from GitHub Releases:
   https://github.com/Bouric0076/pocketbudget/releases
 
 Always download the latest tagged release unless a specific version is shared with you.
+
+**Track Downloads:** Each release displays download counts on the GitHub Releases page. Check back anytime to see how many users have downloaded your app!
 
 ## How to Install (Android)
 
