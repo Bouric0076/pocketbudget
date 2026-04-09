@@ -9,6 +9,22 @@ plugins {
     id("kotlin-kapt")
 }
 
+val keystorePropertiesFile = file("keystore.properties")
+val releaseSigningRequested = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+val hasKeystoreProperties = keystorePropertiesFile.exists()
+
+if (releaseSigningRequested && !hasKeystoreProperties) {
+    throw GradleException("Missing app/keystore.properties. Release builds require signing configuration.")
+}
+
+val keystoreProperties = Properties()
+
+if (hasKeystoreProperties) {
+    FileInputStream(keystorePropertiesFile).use { inputStream ->
+        keystoreProperties.load(inputStream)
+    }
+}
+
 android {
     namespace = "com.ics2300.pocketbudget"
     compileSdk = 36
@@ -25,14 +41,12 @@ android {
 
     signingConfigs {
         create("release") {
-            val keystorePropertiesFile = file("keystore.properties")
-            val keystoreProperties = Properties()
-            keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-
-            storeFile = file(keystoreProperties.getProperty("storeFile", "release.keystore"))
-            storePassword = keystoreProperties.getProperty("storePassword")
-            keyAlias = keystoreProperties.getProperty("keyAlias")
-            keyPassword = keystoreProperties.getProperty("keyPassword")
+            if (hasKeystoreProperties) {
+                storeFile = file(keystoreProperties.getProperty("storeFile", "release.keystore"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
         }
     }
 
@@ -40,7 +54,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            if (hasKeystoreProperties) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
