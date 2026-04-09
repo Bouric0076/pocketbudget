@@ -72,7 +72,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "${SIGNING_KEYSTORE_BASE64}" | base64 --decode > app/release.keystore
+          CLEAN_KEYSTORE_BASE64=$(printf '%s' "$SIGNING_KEYSTORE_BASE64" | tr -d '\r\n[:space:]')
+          if [[ -z "$CLEAN_KEYSTORE_BASE64" || "$CLEAN_KEYSTORE_BASE64" == "PASTE_BASE64_KEYSTORE_HERE" || "$CLEAN_KEYSTORE_BASE64" == SIGNING_KEYSTORE_BASE64=* ]]; then
+            echo "SIGNING_KEYSTORE_BASE64 is not set to a valid base64-encoded keystore. Replace the GitHub secret with the exact output of:"
+            echo "base64 -w 0 app/release.keystore"
+            exit 1
+          fi
+
+          printf '%s' "$CLEAN_KEYSTORE_BASE64" | base64 --decode > app/release.keystore
           {
             echo "storeFile=release.keystore"
             echo "storePassword=${SIGNING_STORE_PASSWORD}"
