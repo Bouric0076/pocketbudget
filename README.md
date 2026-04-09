@@ -99,6 +99,29 @@ Try disabling Play Protect temporarily:
 - Organizes spending into categories.
 - Shows summaries and trends to help you budget better.
 
+## App Screenshots
+
+### Dashboard & Overview
+View your income, spending, and budget status at a glance:
+
+| Dashboard | Budget Management |
+|-----------|------------------|
+| ![Dashboard](assets/home-screen.jpeg) | ![Budget](assets/budget-screen.jpeg) |
+
+### Transactions & Analytics
+Track individual transactions and analyze spending patterns:
+
+| Transactions List | Analytics & Stats |
+|------------------|------------------|
+| ![Transactions](assets/transaction-screen.jpeg) | ![Stats](assets/stats-screen.jpeg) |
+
+### Security & Settings
+Secure your app with PIN lock and customize preferences:
+
+| PIN Lock | Settings |
+|----------|----------|
+| ![Lock Screen](assets/lock-screen.jpeg) | ![Settings](assets/settings-screen.jpeg) |
+
 ## First-Time Setup
 1. Open the app.
 2. Allow required permissions (SMS and notifications, if requested).
