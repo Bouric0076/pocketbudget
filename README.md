@@ -16,6 +16,9 @@ Always download the latest tagged release unless a specific version is shared wi
 
 When you first install PocketBudget KE from GitHub, Google Play Protect may show a warning:
 
+![Google Play Protect Warning](assets/image.png)
+
+The warning message reads:
 ```
 🛡️ Google Play Protect
 
@@ -33,7 +36,7 @@ This can increase the risk of identity theft or financial fraud.
   - ✅ Runs 100% offline (no internet calls, no data sent)
   - ✅ All data encrypted locally on your phone
   - ✅ Fully open-source on GitHub (code is public)
-  - ✅ Stores everything in encrypted SQLite database
+  - ✅ Stores everything in encrypted Room database
 
 ### Step-by-Step Installation
 
