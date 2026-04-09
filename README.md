@@ -6,7 +6,7 @@ PocketBudget KE helps you track spending from M-Pesa messages and understand whe
 - Testing builds are available from GitHub Releases:
   https://github.com/Bouric0076/pocketbudget/releases
 
-Always download the latest release unless a specific version is shared with you.
+Always download the latest tagged release unless a specific version is shared with you.
 
 ## How to Install (Android)
 1. Download the APK file from the Releases page.
@@ -51,12 +51,5 @@ Please share:
 ## Project Status
 PocketBudget KE is under active development and testing. New builds may include changes and fixes based on user feedback.
 
-## Security Guardrail for Contributors
-This repository includes a pre-commit hook template that blocks committing these sensitive files:
-- `*.keystore`
-- `keystore.properties`
-
-Enable it once on your machine:
-```bash
-git config core.hooksPath .githooks
-```
+## For Developers
+If you want the build, release, signing, and contributor workflow details, see [TECHNICAL.md](TECHNICAL.md).
