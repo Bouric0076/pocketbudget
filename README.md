@@ -1,26 +1,62 @@
 # PocketBudget KE
 
-## Project Overview
-PocketBudget KE is an offline-first Android application designed to help users monitor and understand their spending habits by automatically extracting transaction data from M-Pesa SMS messages. The system parses transaction messages, stores structured transaction records locally, categorizes spending, and generates financial summaries and insights.
+PocketBudget KE helps you track spending from M-Pesa messages and understand where your money goes.
 
-## Setup Instructions
-1.  **Clone the repository.**
-2.  **Open in Android Studio.**
-3.  **Sync Gradle.**
-4.  **Run on Emulator/Device.**
+## Download the App
+- Testing builds are available from GitHub Releases:
+  https://github.com/Bouric0076/pocketbudget/releases
 
-## Branch Naming Convention
--   `feature/feature-name` (e.g., `feature/sms-reader`)
--   `bugfix/bug-description`
--   `hotfix/critical-fix`
+Always download the latest release unless a specific version is shared with you.
 
-## PR Rules
-1.  Ensure code compiles.
-2.  Follow coding standards.
-3.  Review your own code before submitting.
+## How to Install (Android)
+1. Download the APK file from the Releases page.
+2. Open the APK on your phone.
+3. If prompted, allow installation from unknown sources for your browser or file manager.
+4. Continue installation and open PocketBudget KE.
 
-## Architecture
--   **UI**: Fragments + XML Layouts
--   **Navigation**: Android Navigation Component (Single Activity)
--   **Database**: Room Database
--   **Language**: Kotlin
+## What the App Does
+- Reads M-Pesa transaction SMS messages (with your permission).
+- Extracts and saves transaction details.
+- Organizes spending into categories.
+- Shows summaries and trends to help you budget better.
+
+## First-Time Setup
+1. Open the app.
+2. Allow required permissions (SMS and notifications, if requested).
+3. Review your dashboard and recent transactions.
+4. Add or adjust categories based on your spending style.
+
+## Privacy and Data
+- The app is designed to be offline-first.
+- Your transaction data is stored locally on your phone.
+- You can stop SMS access anytime from Android App Permissions.
+
+## Testing Feedback
+This project is currently in a testing phase.
+
+Please share:
+- App version used (from the release page)
+- Your Android version and phone model
+- What you expected vs what happened
+- Screenshots or screen recordings (if possible)
+
+## Common Install Issues
+- APK does not install:
+  Make sure you downloaded the full file and enabled installation from unknown sources.
+- App cannot read transactions:
+  Check SMS permission in Android settings.
+- Missing recent messages:
+  Reopen the app and allow all requested permissions.
+
+## Project Status
+PocketBudget KE is under active development and testing. New builds may include changes and fixes based on user feedback.
+
+## Security Guardrail for Contributors
+This repository includes a pre-commit hook template that blocks committing these sensitive files:
+- `*.keystore`
+- `keystore.properties`
+
+Enable it once on your machine:
+```bash
+git config core.hooksPath .githooks
+```

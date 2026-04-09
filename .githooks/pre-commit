@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Block committing signing artifacts and local keystore config files.
+blocked_files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)([^/]+\.keystore|keystore\.properties)$' || true)
+
+if [[ -n "$blocked_files" ]]; then
+  echo "Commit blocked: sensitive signing files detected in staged changes."
+  echo ""
+  echo "Remove these files from staging:"
+  echo "$blocked_files"
+  echo ""
+  echo "Run: git restore --staged <file>"
+  exit 1
+fi
