@@ -54,4 +54,16 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
     <color name="brand_accent_orange">#FF9800</color>
+    <color name="onboarding_hero_green">#1B6B4A</color>
+    <color name="onboarding_chip_green">#E8F5EE</color>
+    <color name="onboarding_hero_indigo">#534AB7</color>
+    <color name="onboarding_chip_indigo">#EEEDFE</color>
+    <color name="brand_indigo">#534AB7</color>
+    <color name="onboarding_hero_amber">#BA7517</color>
+    <color name="onboarding_chip_amber">#FAEEDA</color>
+    <color name="brand_amber">#BA7517</color>
+    <!-- Legacy/duplicate text colors removed to avoid resource name conflicts -->
+    <!-- Add missing colors referenced by onboarding layouts -->
+    <color name="background_primary">#FFFFFFFF</color>
+    <color name="text_tertiary">#AAAAAA</color>
 </resources>

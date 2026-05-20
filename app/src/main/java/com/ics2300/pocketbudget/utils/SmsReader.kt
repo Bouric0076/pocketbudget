@@ -1,48 +1,72 @@
 package com.ics2300.pocketbudget.utils
 
 import android.content.Context
-import android.database.Cursor
 import android.provider.Telephony
+import android.util.Log
 
-class SmsReader(private val context: Context) {
+class SmsReader(
+    private val context: Context
+) {
 
-    data class SmsData(val body: String, val date: Long)
+    data class SmsData(
+        val body: String,
+        val date: Long
+    )
 
     fun readMpesaMessages(afterTimestamp: Long = 0L): List<SmsData> {
         val messages = mutableListOf<SmsData>()
-        val uri = Telephony.Sms.Inbox.CONTENT_URI
-        val projection = arrayOf(Telephony.Sms.BODY, Telephony.Sms.DATE)
-        
-        // Filter by sender address AND date
-        val selection = "(${Telephony.Sms.ADDRESS} LIKE ? OR ${Telephony.Sms.ADDRESS} LIKE ?) AND ${Telephony.Sms.DATE} > ?"
-        val selectionArgs = arrayOf("%MPESA%", "%M-PESA%", afterTimestamp.toString()) 
-        val sortOrder = "${Telephony.Sms.DATE} ASC" // Read oldest to newest for syncing
 
-        try {
-            val cursor: Cursor? = context.contentResolver.query(
-                uri,
+        val projection = arrayOf(
+            Telephony.Sms.BODY,
+            Telephony.Sms.DATE
+        )
+
+        val selection = """
+            (${Telephony.Sms.ADDRESS} LIKE ? OR ${Telephony.Sms.ADDRESS} LIKE ?)
+            AND ${Telephony.Sms.DATE} > ?
+        """.trimIndent()
+
+        val selectionArgs = arrayOf(
+            "%MPESA%",
+            "%M-PESA%",
+            afterTimestamp.toString()
+        )
+
+        val sortOrder = "${Telephony.Sms.DATE} ASC"
+
+        return try {
+            context.contentResolver.query(
+                Telephony.Sms.Inbox.CONTENT_URI,
                 projection,
                 selection,
                 selectionArgs,
                 sortOrder
-            )
+            )?.use { cursor ->
 
-            cursor?.use {
-                val bodyIndex = it.getColumnIndex(Telephony.Sms.BODY)
-                val dateIndex = it.getColumnIndex(Telephony.Sms.DATE)
-                
-                while (it.moveToNext()) {
-                    if (bodyIndex != -1 && dateIndex != -1) {
-                        val body = it.getString(bodyIndex)
-                        val date = it.getLong(dateIndex)
+                val bodyIndex = cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)
+                val dateIndex = cursor.getColumnIndexOrThrow(Telephony.Sms.DATE)
+
+                while (cursor.moveToNext()) {
+                    val body = cursor.getString(bodyIndex).orEmpty()
+                    val date = cursor.getLong(dateIndex)
+
+                    if (body.isNotBlank() && date > 0L) {
                         messages.add(SmsData(body, date))
                     }
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
 
-        return messages
+            messages
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SMS permission denied while reading M-Pesa messages.", e)
+            emptyList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read M-Pesa SMS messages.", e)
+            emptyList()
+        }
+    }
+
+    companion object {
+        private const val TAG = "SmsReader"
     }
 }

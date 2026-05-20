@@ -1,133 +1,139 @@
 package com.ics2300.pocketbudget
 
+import android.app.Activity
 import android.app.Application
-import androidx.room.Room
-import com.ics2300.pocketbudget.data.AppDatabase
-import com.ics2300.pocketbudget.data.TransactionRepository
-import com.ics2300.pocketbudget.data.NotificationRepository
-import com.ics2300.pocketbudget.utils.SmsReader
-
-import com.ics2300.pocketbudget.utils.NotificationHelper
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import java.util.Calendar
-import java.util.concurrent.TimeUnit
-
-import android.os.Build
-import android.app.Activity
-import android.os.Bundle
-import android.content.Intent
+import com.ics2300.pocketbudget.data.NotificationRepository
+import com.ics2300.pocketbudget.data.TransactionRepository
 import com.ics2300.pocketbudget.ui.AppLockActivity
-import com.ics2300.pocketbudget.utils.SecurityUtils
-
 import com.ics2300.pocketbudget.utils.AppLockManager
-
+import com.ics2300.pocketbudget.utils.NotificationHelper
+import com.ics2300.pocketbudget.utils.SecurityUtils
 import dagger.hilt.android.HiltAndroidApp
-import javax.inject.Inject
 import kotlinx.coroutines.MainScope
+import java.util.Calendar
+import java.util.Collections
+import java.util.WeakHashMap
+import java.util.concurrent.TimeUnit
+import javax.inject.Inject
 
 @HiltAndroidApp
 class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
 
     @Inject lateinit var repository: TransactionRepository
     @Inject lateinit var notificationRepository: NotificationRepository
-    
+
     val applicationScope = MainScope()
 
-    private var activityReferences = 0
-    private var isActivityChangingConfigurations = false
-    // Removed legacy lastBackgroundTime variable in favor of AppLockManager
+    private val startedActivities = Collections.newSetFromMap(
+        WeakHashMap<Activity, Boolean>()
+    )
+
+    private var isChangingConfigurations = false
 
     fun resetBackgroundTime() {
-        // Legacy support if needed, but primarily handled by AppLockManager
         AppLockManager.unlockSession()
     }
 
     override fun onCreate() {
         super.onCreate()
+
         NotificationHelper.createNotificationChannels(this)
+
         scheduleDailySummary()
         scheduleRecurringTaskCheck()
         scheduleBillReminders()
         scheduleBudgetWatcher()
-        
+
         registerActivityLifecycleCallbacks(this)
         repository.startSmsListener(applicationScope)
 
-        Thread.setDefaultUncaughtExceptionHandler { _, e -> 
-            // In a real app, you'd want to log this to a remote service
-            e.printStackTrace()
+        Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
+            throwable.printStackTrace()
         }
     }
 
-    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
 
     override fun onActivityStarted(activity: Activity) {
-        if (++activityReferences == 1 && !isActivityChangingConfigurations) {
-            // App enters foreground
-            if (SecurityUtils.isSecurityEnabled(this) && activity !is AppLockActivity) {
-                if (AppLockManager.shouldLock()) {
-                     val intent = Intent(activity, AppLockActivity::class.java)
-                     intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                     activity.startActivity(intent)
-                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                          activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
-                      } else {
-                          @Suppress("DEPRECATION")
-                          activity.overridePendingTransition(0, 0)
-                      }
-                }
-            }
+        val wasInBackground = startedActivities.isEmpty()
+
+        startedActivities.add(activity)
+        isChangingConfigurations = false
+
+        if (wasInBackground) {
+            maybeLaunchAppLock(activity)
         }
     }
 
     override fun onActivityResumed(activity: Activity) {
-        // Double check on resume to handle fast switches
-        if (SecurityUtils.isSecurityEnabled(this) && activity !is AppLockActivity) {
-            if (AppLockManager.shouldLock()) {
-                 val intent = Intent(activity, AppLockActivity::class.java)
-                 intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                 activity.startActivity(intent)
-                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                     activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
-                 } else {
-                     @Suppress("DEPRECATION")
-                     activity.overridePendingTransition(0, 0)
-                 }
-            }
-        }
+        maybeLaunchAppLock(activity)
     }
 
-    override fun onActivityPaused(activity: Activity) {}
+    override fun onActivityPaused(activity: Activity) = Unit
 
     override fun onActivityStopped(activity: Activity) {
-        isActivityChangingConfigurations = activity.isChangingConfigurations
-        if (--activityReferences == 0 && !isActivityChangingConfigurations) {
-            // App enters background
-            AppLockManager.lockSession()
+        isChangingConfigurations = activity.isChangingConfigurations
+        startedActivities.remove(activity)
+
+        if (startedActivities.isEmpty() && !isChangingConfigurations) {
+            AppLockManager.markAppBackgrounded()
         }
     }
 
-    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
 
-    override fun onActivityDestroyed(activity: Activity) {}
+    override fun onActivityDestroyed(activity: Activity) {
+        startedActivities.remove(activity)
+    }
+
+    private fun maybeLaunchAppLock(activity: Activity) {
+        if (activity is AppLockActivity) return
+        if (!SecurityUtils.isSecurityEnabled(this)) return
+
+        if (AppLockManager.shouldLockAfterTimeout(SecurityUtils.LOCK_TIMEOUT_MS)) {
+            val intent = Intent(activity, AppLockActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+
+            activity.startActivity(intent)
+            suppressTransition(activity)
+        }
+    }
+
+    private fun suppressTransition(activity: Activity) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
+        } else {
+            @Suppress("DEPRECATION")
+            activity.overridePendingTransition(0, 0)
+        }
+    }
 
     private fun scheduleRecurringTaskCheck() {
         val constraints = Constraints.Builder()
             .setRequiresBatteryNotLow(true)
             .build()
 
-        // Check every 4 hours (minimum 15 mins, but 4-12h is reasonable)
-        val recurringWorkRequest = PeriodicWorkRequestBuilder<com.ics2300.pocketbudget.workers.RecurringTaskWorker>(4, TimeUnit.HOURS)
-            .setConstraints(constraints)
-            .addTag("recurring_check")
-            .build()
+        val recurringWorkRequest =
+            PeriodicWorkRequestBuilder<com.ics2300.pocketbudget.workers.RecurringTaskWorker>(
+                4,
+                TimeUnit.HOURS
+            )
+                .setConstraints(constraints)
+                .addTag("recurring_check")
+                .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "recurring_check",
-            ExistingPeriodicWorkPolicy.UPDATE, 
+            ExistingPeriodicWorkPolicy.UPDATE,
             recurringWorkRequest
         )
     }
@@ -138,25 +144,31 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
             .build()
 
         val currentDate = Calendar.getInstance()
-        val dueDate = Calendar.getInstance()
-        dueDate.set(Calendar.HOUR_OF_DAY, 21) // 9 PM
-        dueDate.set(Calendar.MINUTE, 0)
-        dueDate.set(Calendar.SECOND, 0)
+        val dueDate = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 21)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+        }
 
         if (dueDate.before(currentDate)) {
             dueDate.add(Calendar.HOUR_OF_DAY, 24)
         }
+
         val timeDiff = dueDate.timeInMillis - currentDate.timeInMillis
 
-        val dailyWorkRequest = PeriodicWorkRequestBuilder<com.ics2300.pocketbudget.workers.DailySummaryWorker>(24, TimeUnit.HOURS)
-            .setInitialDelay(timeDiff, TimeUnit.MILLISECONDS)
-            .setConstraints(constraints)
-            .addTag("daily_summary")
-            .build()
+        val dailyWorkRequest =
+            PeriodicWorkRequestBuilder<com.ics2300.pocketbudget.workers.DailySummaryWorker>(
+                24,
+                TimeUnit.HOURS
+            )
+                .setInitialDelay(timeDiff, TimeUnit.MILLISECONDS)
+                .setConstraints(constraints)
+                .addTag("daily_summary")
+                .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "daily_summary",
-            ExistingPeriodicWorkPolicy.UPDATE, 
+            ExistingPeriodicWorkPolicy.UPDATE,
             dailyWorkRequest
         )
     }
@@ -165,28 +177,33 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
         val constraints = Constraints.Builder()
             .setRequiresBatteryNotLow(true)
             .build()
-            
-        // Check once a day at 8 AM
+
         val currentDate = Calendar.getInstance()
-        val dueDate = Calendar.getInstance()
-        dueDate.set(Calendar.HOUR_OF_DAY, 8) 
-        dueDate.set(Calendar.MINUTE, 0)
-        dueDate.set(Calendar.SECOND, 0)
+        val dueDate = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 8)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+        }
 
         if (dueDate.before(currentDate)) {
             dueDate.add(Calendar.HOUR_OF_DAY, 24)
         }
+
         val timeDiff = dueDate.timeInMillis - currentDate.timeInMillis
-        
-        val billWorkRequest = PeriodicWorkRequestBuilder<com.ics2300.pocketbudget.workers.BillReminderWorker>(24, TimeUnit.HOURS)
-            .setInitialDelay(timeDiff, TimeUnit.MILLISECONDS)
-            .setConstraints(constraints)
-            .addTag("bill_reminders")
-            .build()
+
+        val billWorkRequest =
+            PeriodicWorkRequestBuilder<com.ics2300.pocketbudget.workers.BillReminderWorker>(
+                24,
+                TimeUnit.HOURS
+            )
+                .setInitialDelay(timeDiff, TimeUnit.MILLISECONDS)
+                .setConstraints(constraints)
+                .addTag("bill_reminders")
+                .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "bill_reminders",
-            ExistingPeriodicWorkPolicy.UPDATE, 
+            ExistingPeriodicWorkPolicy.UPDATE,
             billWorkRequest
         )
     }
@@ -195,16 +212,19 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
         val constraints = Constraints.Builder()
             .setRequiresBatteryNotLow(true)
             .build()
-            
-        // Check every 4 hours
-        val budgetWorkRequest = PeriodicWorkRequestBuilder<com.ics2300.pocketbudget.workers.BudgetWatcherWorker>(4, TimeUnit.HOURS)
-            .setConstraints(constraints)
-            .addTag("budget_watcher")
-            .build()
+
+        val budgetWorkRequest =
+            PeriodicWorkRequestBuilder<com.ics2300.pocketbudget.workers.BudgetWatcherWorker>(
+                4,
+                TimeUnit.HOURS
+            )
+                .setConstraints(constraints)
+                .addTag("budget_watcher")
+                .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "budget_watcher",
-            ExistingPeriodicWorkPolicy.UPDATE, 
+            ExistingPeriodicWorkPolicy.UPDATE,
             budgetWorkRequest
         )
     }

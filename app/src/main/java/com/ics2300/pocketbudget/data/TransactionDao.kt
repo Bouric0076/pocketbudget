@@ -9,13 +9,16 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TransactionDao {
-    // Transaction Methods
+
     @Transaction
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
     fun getTransactionsWithCategory(): Flow<List<TransactionWithCategory>>
 
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
     fun getAllTransactions(): Flow<List<TransactionEntity>>
+
+    @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
+    suspend fun getAllTransactionsList(): List<TransactionEntity>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertTransaction(transaction: TransactionEntity): Long
@@ -29,7 +32,8 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE partyName LIKE '%' || :query || '%' ORDER BY timestamp DESC")
     fun searchTransactions(query: String): Flow<List<TransactionEntity>>
 
-    @Query("""
+    @Query(
+        """
         SELECT * FROM transactions 
         WHERE (:query IS NULL OR partyName LIKE '%' || :query || '%')
         AND (:startDate IS NULL OR timestamp >= :startDate)
@@ -44,7 +48,8 @@ interface TransactionDao {
             OR (:filterType = 'UNCATEGORIZED' AND (categoryId IS NULL OR categoryId IN (SELECT id FROM categories WHERE name = 'Uncategorized')))
         )
         ORDER BY timestamp DESC
-    """)
+        """
+    )
     fun getFilteredTransactions(
         query: String?,
         startDate: Long?,
@@ -55,16 +60,18 @@ interface TransactionDao {
         filterType: String
     ): Flow<List<TransactionEntity>>
 
-    @Query("""
+    @Query(
+        """
         SELECT 
-            SUM(CASE WHEN type IN ('Received', 'Deposit') THEN amount ELSE 0 END) as totalIncome,
-            SUM(CASE WHEN type NOT IN ('Received', 'Deposit') THEN amount ELSE 0 END) as totalExpense,
-            SUM(CASE WHEN type IN ('Received', 'Deposit') THEN amount ELSE -amount END) as balance,
+            COALESCE(SUM(CASE WHEN type IN ('Received', 'Deposit') THEN amount ELSE 0 END), 0) as totalIncome,
+            COALESCE(SUM(CASE WHEN type NOT IN ('Received', 'Deposit') THEN amount ELSE 0 END), 0) as totalExpense,
+            COALESCE(SUM(CASE WHEN type IN ('Received', 'Deposit') THEN amount ELSE -amount END), 0) as balance,
             COUNT(*) as transactionCount
         FROM transactions
         WHERE (:startDate IS NULL OR timestamp >= :startDate)
         AND (:endDate IS NULL OR timestamp <= :endDate)
-    """)
+        """
+    )
     fun getDashboardStats(startDate: Long?, endDate: Long?): Flow<DashboardStats>
 
     @Query("SELECT * FROM transactions WHERE categoryId = :categoryId")
@@ -73,8 +80,14 @@ interface TransactionDao {
     @Query("UPDATE transactions SET categoryId = :categoryId WHERE id = :transactionId")
     suspend fun updateTransactionCategory(transactionId: Int, categoryId: Int)
 
+    @Query("UPDATE transactions SET categoryId = :categoryId WHERE partyName = :partyName")
+    suspend fun updateTransactionsCategoryByPartyName(partyName: String, categoryId: Int)
+
     @Query("SELECT * FROM transactions WHERE id = :transactionId")
     suspend fun getTransactionById(transactionId: Int): TransactionEntity?
+
+    @Query("SELECT * FROM transactions WHERE partyName = :partyName AND categoryId IS NOT NULL")
+    suspend fun getCategorizedTransactionsByPartyName(partyName: String): List<TransactionEntity>
 
     @Query("SELECT * FROM recurring_transactions WHERE isActive = 1")
     fun getAllRecurringTransactions(): Flow<List<RecurringTransactionEntity>>
@@ -94,14 +107,11 @@ interface TransactionDao {
     @Query("SELECT * FROM recurring_transactions WHERE isActive = 1 AND nextDueDate BETWEEN :startTime AND :endTime")
     suspend fun getUpcomingRecurringTransactions(startTime: Long, endTime: Long): List<RecurringTransactionEntity>
 
-    // Category Methods
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCategory(category: CategoryEntity): Long
 
     @Query("SELECT * FROM categories")
     fun getAllCategories(): Flow<List<CategoryEntity>>
-
-
 
     @Query("DELETE FROM transactions")
     suspend fun deleteAllTransactions()
@@ -113,7 +123,13 @@ interface TransactionDao {
     suspend fun getCategoryById(id: Int): CategoryEntity?
 
     @Query("UPDATE categories SET name = :name, keywords = :keywords, iconName = :iconName, colorHex = :colorHex WHERE id = :id")
-    suspend fun updateCategory(id: Int, name: String, keywords: String, iconName: String, colorHex: String)
+    suspend fun updateCategory(
+        id: Int,
+        name: String,
+        keywords: String,
+        iconName: String,
+        colorHex: String
+    )
 
     @Query("DELETE FROM categories WHERE id = :id")
     suspend fun deleteCategory(id: Int)
@@ -121,19 +137,54 @@ interface TransactionDao {
     @Query("SELECT * FROM categories")
     suspend fun getAllCategoriesList(): List<CategoryEntity>
 
-    @Query("SELECT c.name as categoryName, SUM(CASE WHEN t.type = 'Reversal' THEN -t.amount ELSE t.amount END) as totalAmount, c.iconName, c.colorHex FROM transactions t INNER JOIN categories c ON t.categoryId = c.id WHERE t.type NOT IN ('Received', 'Deposit') GROUP BY c.id ORDER BY totalAmount DESC")
+    @Query(
+        """
+        SELECT 
+            c.name as categoryName,
+            COALESCE(SUM(CASE WHEN t.type = 'Reversal' THEN -t.amount ELSE t.amount END), 0) as totalAmount,
+            c.iconName,
+            c.colorHex
+        FROM transactions t
+        INNER JOIN categories c ON t.categoryId = c.id
+        WHERE t.type NOT IN ('Received', 'Deposit')
+        GROUP BY c.id
+        ORDER BY totalAmount DESC
+        """
+    )
     fun getCategorySpending(): Flow<List<CategorySpending>>
 
     @Query("SELECT COUNT(*) FROM categories")
     suspend fun getCategoryCount(): Int
 
-    @Query("SELECT partyName, SUM(amount) as totalAmount FROM transactions WHERE type NOT IN ('Received', 'Deposit', 'Reversal') GROUP BY partyName ORDER BY totalAmount DESC LIMIT :limit")
+    @Query(
+        """
+        SELECT partyName, SUM(amount) as totalAmount
+        FROM transactions
+        WHERE type NOT IN ('Received', 'Deposit', 'Reversal')
+        GROUP BY partyName
+        ORDER BY totalAmount DESC
+        LIMIT :limit
+        """
+    )
     fun getTopSpendingActors(limit: Int): Flow<List<ActorSpending>>
 
-    @Query("SELECT partyName, SUM(amount) as totalAmount FROM transactions WHERE type NOT IN ('Received', 'Deposit', 'Reversal') AND timestamp BETWEEN :startDate AND :endDate GROUP BY partyName ORDER BY totalAmount DESC LIMIT :limit")
-    fun getTopSpendingActorsByDate(limit: Int, startDate: Long, endDate: Long): Flow<List<ActorSpending>>
+    @Query(
+        """
+        SELECT partyName, SUM(amount) as totalAmount
+        FROM transactions
+        WHERE type NOT IN ('Received', 'Deposit', 'Reversal')
+        AND timestamp BETWEEN :startDate AND :endDate
+        GROUP BY partyName
+        ORDER BY totalAmount DESC
+        LIMIT :limit
+        """
+    )
+    fun getTopSpendingActorsByDate(
+        limit: Int,
+        startDate: Long,
+        endDate: Long
+    ): Flow<List<ActorSpending>>
 
-    // Budget Methods
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBudget(budget: BudgetEntity): Long
 
@@ -141,30 +192,45 @@ interface TransactionDao {
     fun getBudgetForMonth(month: Int, year: Int): Flow<List<BudgetEntity>>
 
     @Query("SELECT * FROM budgets WHERE categoryId = :categoryId AND month = :month AND year = :year LIMIT 1")
-    suspend fun getBudgetForCategory(categoryId: Int, month: Int, year: Int): BudgetEntity?
-    
-    // Complex query to get budget progress for all categories
-    // This left joins categories with their budgets for the specific month/year
-    // And also joins with aggregated transaction sums
-    @Query("""
+    suspend fun getBudgetForCategory(
+        categoryId: Int,
+        month: Int,
+        year: Int
+    ): BudgetEntity?
+
+    @Query(
+        """
         SELECT 
             c.id as categoryId, 
             c.name as categoryName, 
-            COALESCE(SUM(CASE WHEN t.type = 'Reversal' THEN -t.amount WHEN t.type NOT IN ('Received', 'Deposit') THEN t.amount ELSE 0 END), 0) as totalSpent,
+            COALESCE(SUM(CASE 
+                WHEN t.type = 'Reversal' THEN -t.amount 
+                WHEN t.type NOT IN ('Received', 'Deposit') THEN t.amount 
+                ELSE 0 
+            END), 0) as totalSpent,
             COALESCE(b.amount, 0) as budgetAmount,
             :month as month,
             :year as year,
             c.iconName,
             c.colorHex
         FROM categories c
-        LEFT JOIN transactions t ON c.id = t.categoryId AND strftime('%m', t.timestamp / 1000, 'unixepoch') = printf('%02d', :month) AND strftime('%Y', t.timestamp / 1000, 'unixepoch') = printf('%d', :year)
-        LEFT JOIN budgets b ON c.id = b.categoryId AND b.month = :month AND b.year = :year
+        LEFT JOIN transactions t 
+            ON c.id = t.categoryId 
+            AND strftime('%m', t.timestamp / 1000, 'unixepoch') = printf('%02d', :month) 
+            AND strftime('%Y', t.timestamp / 1000, 'unixepoch') = printf('%d', :year)
+        LEFT JOIN budgets b 
+            ON c.id = b.categoryId 
+            AND b.month = :month 
+            AND b.year = :year
         WHERE c.name NOT IN ('Transfer', 'Income')
         GROUP BY c.id
-    """)
-    fun getCategoryBudgetProgress(month: Int, year: Int): Flow<List<CategoryBudgetProgress>>
+        """
+    )
+    fun getCategoryBudgetProgress(
+        month: Int,
+        year: Int
+    ): Flow<List<CategoryBudgetProgress>>
 
-    // Actor Mapping Methods
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertActorMapping(mapping: ActorCategoryMapping)
 
@@ -173,4 +239,33 @@ interface TransactionDao {
 
     @Query("SELECT * FROM actor_category_mappings")
     suspend fun getAllActorMappings(): List<ActorCategoryMapping>
+
+    @Transaction
+    suspend fun updateCategoryAndLearnActor(
+        transactionId: Int,
+        partyName: String,
+        categoryId: Int
+    ) {
+        updateTransactionCategory(transactionId, categoryId)
+        insertActorMapping(ActorCategoryMapping(partyName, categoryId))
+    }
+
+    @Transaction
+    suspend fun bulkCategorizePartyAndLearn(
+        partyName: String,
+        categoryId: Int
+    ) {
+        updateTransactionsCategoryByPartyName(partyName, categoryId)
+        insertActorMapping(ActorCategoryMapping(partyName, categoryId))
+    }
+
+    @Transaction
+    suspend fun insertRecurringAndAdvance(
+        transaction: TransactionEntity,
+        recurringId: Int,
+        nextDate: Long
+    ) {
+        insertTransaction(transaction)
+        updateRecurringNextDueDate(recurringId, nextDate)
+    }
 }

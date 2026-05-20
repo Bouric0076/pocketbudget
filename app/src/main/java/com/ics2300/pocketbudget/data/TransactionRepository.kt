@@ -1,6 +1,7 @@
 package com.ics2300.pocketbudget.data
 
 import android.content.Context
+import android.util.Log
 import com.ics2300.pocketbudget.utils.CategoryUtils
 import com.ics2300.pocketbudget.utils.MpesaParser
 import com.ics2300.pocketbudget.utils.NotificationHelper
@@ -8,10 +9,11 @@ import com.ics2300.pocketbudget.utils.SmsReader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.Calendar
+import kotlin.math.abs
 
 class TransactionRepository(
     private val context: Context,
@@ -19,25 +21,41 @@ class TransactionRepository(
     private val smsReader: SmsReader
 ) {
 
-    fun startSmsListener(scope: CoroutineScope) {
-        // Since we are back to standard SMS_RECEIVED broadcast receiver, 
-        // we don't need to start a listener here manually anymore.
-        // The SmsReceiver in the manifest will handle it.
-        // However, we'll keep the method signature for compatibility.
+    companion object {
+        private const val TAG = "TransactionRepository"
+        private const val PREF_NAME = "pocketbudget_prefs"
+        private const val KEY_LAST_SMS_SYNC_TIMESTAMP = "last_sms_sync_timestamp"
     }
 
-    val transactionsWithCategory: Flow<List<TransactionWithCategory>> = transactionDao.getTransactionsWithCategory()
+    private val smsProcessingMutex = Mutex()
+    private val syncMutex = Mutex()
 
-    val allTransactions: Flow<List<TransactionEntity>> = transactionDao.getAllTransactions()
-    val allCategories: Flow<List<CategoryEntity>> = transactionDao.getAllCategories()
+    fun startSmsListener(scope: CoroutineScope) {
+        // BroadcastReceiver handles SMS processing.
+    }
+
+    val transactionsWithCategory: Flow<List<TransactionWithCategory>> =
+        transactionDao.getTransactionsWithCategory()
+
+    val allTransactions: Flow<List<TransactionEntity>> =
+        transactionDao.getAllTransactions()
+
+    val allCategories: Flow<List<CategoryEntity>> =
+        transactionDao.getAllCategories()
+
+    val categorySpending: Flow<List<CategorySpending>> =
+        transactionDao.getCategorySpending()
+
+    val recurringTransactions: Flow<List<RecurringTransactionEntity>> =
+        transactionDao.getAllRecurringTransactions()
 
     private var cachedCategories: List<CategoryEntity>? = null
 
     suspend fun getCategoriesCached(): List<CategoryEntity> {
         return cachedCategories ?: withContext(Dispatchers.IO) {
-            val cats = transactionDao.getAllCategoriesList()
-            cachedCategories = cats
-            cats
+            val categories = transactionDao.getAllCategoriesList()
+            cachedCategories = categories
+            categories
         }
     }
 
@@ -61,7 +79,10 @@ class TransactionRepository(
         )
     }
 
-    fun getDashboardStats(startDate: Long?, endDate: Long?): Flow<DashboardStats> {
+    fun getDashboardStats(
+        startDate: Long?,
+        endDate: Long?
+    ): Flow<DashboardStats> {
         return transactionDao.getDashboardStats(startDate, endDate)
     }
 
@@ -69,13 +90,17 @@ class TransactionRepository(
         return transactionDao.searchTransactions(query)
     }
 
-    suspend fun getTransactionsByDateRange(start: Long, end: Long): List<TransactionEntity> {
+    suspend fun getTransactionsByDateRange(
+        start: Long,
+        end: Long
+    ): List<TransactionEntity> {
         return transactionDao.getTransactionsListByDateRange(start, end)
     }
 
-    val categorySpending: Flow<List<CategorySpending>> = transactionDao.getCategorySpending()
-
-    fun getBudgetProgress(month: Int, year: Int): Flow<List<CategoryBudgetProgress>> {
+    fun getBudgetProgress(
+        month: Int,
+        year: Int
+    ): Flow<List<CategoryBudgetProgress>> {
         return transactionDao.getCategoryBudgetProgress(month, year)
     }
 
@@ -83,58 +108,79 @@ class TransactionRepository(
         return transactionDao.getTopSpendingActors(limit)
     }
 
-    fun getTopSpendingActorsByDate(limit: Int = 5, start: Long, end: Long): Flow<List<ActorSpending>> {
+    fun getTopSpendingActorsByDate(
+        limit: Int = 5,
+        start: Long,
+        end: Long
+    ): Flow<List<ActorSpending>> {
         return transactionDao.getTopSpendingActorsByDate(limit, start, end)
     }
 
-    suspend fun setBudget(categoryId: Int, amount: Double, month: Int, year: Int) {
-        val existing = transactionDao.getBudgetForCategory(categoryId, month, year)
-        val budget = if (existing != null) {
-            existing.copy(amount = amount)
-        } else {
-            BudgetEntity(amount = amount, month = month, year = year, categoryId = categoryId)
-        }
+    suspend fun setBudget(
+        categoryId: Int,
+        amount: Double,
+        month: Int,
+        year: Int
+    ) {
+        val existing = transactionDao.getBudgetForCategory(
+            categoryId,
+            month,
+            year
+        )
+
+        val budget = existing?.copy(amount = amount)
+            ?: BudgetEntity(
+                amount = amount,
+                month = month,
+                year = year,
+                categoryId = categoryId
+            )
+
         transactionDao.insertBudget(budget)
     }
 
-    suspend fun updateTransactionCategory(transactionId: Int, categoryId: Int) {
+    suspend fun updateTransactionCategory(
+        transactionId: Int,
+        categoryId: Int
+    ) {
         withContext(Dispatchers.IO) {
-            transactionDao.updateTransactionCategory(transactionId, categoryId)
-            
-            // Learn from this edit!
+
             val transaction = transactionDao.getTransactionById(transactionId)
-            if (transaction != null) {
-                val normalizedParty = transaction.partyName.trim().uppercase()
-                if (normalizedParty.isNotEmpty()) {
-                    transactionDao.insertActorMapping(ActorCategoryMapping(normalizedParty, categoryId))
-                }
-            }
+                ?: return@withContext
+
+            val normalizedParty =
+                transaction.partyName.trim().uppercase()
+
+            transactionDao.updateCategoryAndLearnActor(
+                transactionId = transactionId,
+                partyName = normalizedParty,
+                categoryId = categoryId
+            )
         }
     }
 
-    suspend fun bulkCategorizeSimilarTransactions(partyName: String, categoryId: Int) {
+    suspend fun bulkCategorizeSimilarTransactions(
+        partyName: String,
+        categoryId: Int
+    ) {
         withContext(Dispatchers.IO) {
+
             val normalizedParty = partyName.trim().uppercase()
-            if (normalizedParty.isEmpty()) return@withContext
 
-            // 1. Get all transactions for this party
-            val transactions = transactionDao.getAllTransactions().firstOrNull() ?: emptyList()
-            val targets = transactions.filter { it.partyName.trim().uppercase() == normalizedParty }
-
-            // 2. Update each transaction
-            for (t in targets) {
-                transactionDao.updateTransactionCategory(t.id, categoryId)
+            if (normalizedParty.isBlank()) {
+                return@withContext
             }
 
-            // 3. Update/Insert actor mapping for future transactions
-            transactionDao.insertActorMapping(ActorCategoryMapping(normalizedParty, categoryId))
+            transactionDao.bulkCategorizePartyAndLearn(
+                normalizedParty,
+                categoryId
+            )
         }
     }
 
-    // Recurring Transaction Methods
-    val recurringTransactions: Flow<List<RecurringTransactionEntity>> = transactionDao.getAllRecurringTransactions()
-
-    suspend fun addRecurringTransaction(recurring: RecurringTransactionEntity) {
+    suspend fun addRecurringTransaction(
+        recurring: RecurringTransactionEntity
+    ) {
         transactionDao.insertRecurringTransaction(recurring)
     }
 
@@ -142,43 +188,57 @@ class TransactionRepository(
         transactionDao.disableRecurringTransaction(id)
     }
 
-    suspend fun getUpcomingRecurringTransactions(start: Long, end: Long): List<RecurringTransactionEntity> {
+    suspend fun getUpcomingRecurringTransactions(
+        start: Long,
+        end: Long
+    ): List<RecurringTransactionEntity> {
         return transactionDao.getUpcomingRecurringTransactions(start, end)
     }
 
     suspend fun processDueRecurringTransactions() {
         withContext(Dispatchers.IO) {
+
             val currentTime = System.currentTimeMillis()
-            val dueItems = transactionDao.getDueRecurringTransactions(currentTime)
+
+            val dueItems =
+                transactionDao.getDueRecurringTransactions(currentTime)
 
             for (item in dueItems) {
-                // 1. Create the transaction
-                val transaction = TransactionEntity(
-                    transactionId = "REC_${item.id}_${item.nextDueDate}",
-                    amount = item.amount,
-                    type = item.type, // "Expense" or "Income"
-                    partyName = item.description,
-                    timestamp = item.nextDueDate,
-                    categoryId = item.categoryId
-                )
 
                 try {
-                    transactionDao.insertTransaction(transaction)
 
-                    // 2. Update next due date
-                    val calendar = java.util.Calendar.getInstance()
-                    calendar.timeInMillis = item.nextDueDate
+                    val transaction = TransactionEntity(
+                        transactionId = "REC_${item.id}_${item.nextDueDate}",
+                        amount = item.amount,
+                        type = item.type,
+                        partyName = item.description,
+                        timestamp = item.nextDueDate,
+                        categoryId = item.categoryId
+                    )
 
-                    when (item.frequency) {
-                        "Daily" -> calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
-                        "Weekly" -> calendar.add(java.util.Calendar.WEEK_OF_YEAR, 1)
-                        "Monthly" -> calendar.add(java.util.Calendar.MONTH, 1)
-                        "Yearly" -> calendar.add(java.util.Calendar.YEAR, 1)
+                    val calendar = Calendar.getInstance().apply {
+                        timeInMillis = item.nextDueDate
                     }
 
-                    transactionDao.updateRecurringNextDueDate(item.id, calendar.timeInMillis)
+                    when (item.frequency) {
+                        "Daily" -> calendar.add(Calendar.DAY_OF_YEAR, 1)
+                        "Weekly" -> calendar.add(Calendar.WEEK_OF_YEAR, 1)
+                        "Monthly" -> calendar.add(Calendar.MONTH, 1)
+                        "Yearly" -> calendar.add(Calendar.YEAR, 1)
+                    }
+
+                    transactionDao.insertRecurringAndAdvance(
+                        transaction = transaction,
+                        recurringId = item.id,
+                        nextDate = calendar.timeInMillis
+                    )
+
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e(
+                        TAG,
+                        "Failed recurring transaction ${item.id}",
+                        e
+                    )
                 }
             }
         }
@@ -190,17 +250,24 @@ class TransactionRepository(
 
     suspend fun addCategory(category: CategoryEntity) {
         transactionDao.insertCategory(category)
-        cachedCategories = null // Invalidate cache
+        cachedCategories = null
     }
 
     suspend fun updateCategory(category: CategoryEntity) {
-        transactionDao.updateCategory(category.id, category.name, category.keywords, category.iconName, category.colorHex)
-        cachedCategories = null // Invalidate cache
+        transactionDao.updateCategory(
+            category.id,
+            category.name,
+            category.keywords,
+            category.iconName,
+            category.colorHex
+        )
+
+        cachedCategories = null
     }
 
     suspend fun deleteCategory(categoryId: Int) {
         transactionDao.deleteCategory(categoryId)
-        cachedCategories = null // Invalidate cache
+        cachedCategories = null
     }
 
     suspend fun clearAllData() {
@@ -208,262 +275,424 @@ class TransactionRepository(
         transactionDao.deleteAllBudgets()
     }
 
-    suspend fun processNewSms(body: String, timestamp: Long = System.currentTimeMillis()): TransactionEntity? = withContext(Dispatchers.IO) {
-        val transaction = MpesaParser.parse(body, timestamp) ?: return@withContext null
+    private suspend fun ensureDefaultCategoriesExist(): List<CategoryEntity> {
 
-        val categories = getCategoriesCached()
-        val categorizedTransaction = categorizeTransaction(transaction, categories)
+        if (transactionDao.getCategoryCount() == 0) {
 
-        val result = transactionDao.insertTransaction(categorizedTransaction)
-        if (result == -1L) {
-            // Duplicate transaction found (based on unique transactionId)
-            // We return null or the transaction?
-            // Returning null indicates "nothing new added"
-            return@withContext null
+            for (category in CategoryUtils.getDefaultCategories()) {
+                transactionDao.insertCategory(category)
+            }
+
+            cachedCategories = null
+
+        } else {
+
+            val categories = transactionDao.getAllCategoriesList()
+
+            if (categories.none {
+                    it.name.equals("Uncategorized", true)
+                }) {
+
+                transactionDao.insertCategory(
+                    CategoryEntity(
+                        name = "Uncategorized",
+                        keywords = "UNCATEGORIZED",
+                        colorHex = CategoryUtils.getDefaultColorHex(0)
+                    )
+                )
+
+                cachedCategories = null
+            }
         }
 
-        // Notify through notification module
-        val categoryName = categories.find { it.id == categorizedTransaction.categoryId }?.name ?: "Uncategorized"
-        NotificationHelper.notifyNewTransaction(context, categorizedTransaction, categoryName)
-
-        return@withContext categorizedTransaction
+        return transactionDao.getAllCategoriesList()
     }
 
-    private suspend fun categorizeTransaction(transaction: TransactionEntity, categories: List<CategoryEntity>): TransactionEntity {
-        var matchedCategoryId: Int? = null
-        val party = transaction.partyName.trim().uppercase()
-        val type = transaction.type.uppercase()
-        val account = transaction.accountName?.trim()?.uppercase() ?: ""
+    suspend fun processNewSms(
+        body: String,
+        timestamp: Long = System.currentTimeMillis()
+    ): TransactionEntity? {
 
-        // 0. Check for learned mappings first (highest priority)
-        if (party.isNotEmpty()) {
-            matchedCategoryId = transactionDao.getCategoryIdForActor(party)
+        return withContext(Dispatchers.IO) {
+
+            smsProcessingMutex.withLock {
+
+                val transaction =
+                    MpesaParser.parse(body, timestamp)
+                        ?: return@withLock null
+
+                val categories = ensureDefaultCategoriesExist()
+
+                val categorized =
+                    categorizeTransaction(transaction, categories)
+
+                if (categorized.categoryId == null) {
+                    Log.e(TAG, "Transaction missing category.")
+                    return@withLock null
+                }
+
+                val result =
+                    transactionDao.insertTransaction(categorized)
+
+                if (result == -1L) {
+                    return@withLock null
+                }
+
+                val categoryName = categories.find {
+                    it.id == categorized.categoryId
+                }?.name ?: "Uncategorized"
+
+                try {
+                    NotificationHelper.notifyNewTransaction(
+                        context,
+                        categorized,
+                        categoryName
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "Notification failed.", e)
+                }
+
+                categorized
+            }
+        }
+    }
+
+    private suspend fun categorizeTransaction(
+        transaction: TransactionEntity,
+        categories: List<CategoryEntity>
+    ): TransactionEntity {
+
+        var matchedCategoryId: Int? = null
+
+        val party =
+            transaction.partyName.trim().uppercase()
+
+        val account =
+            transaction.accountName
+                ?.trim()
+                ?.uppercase()
+                .orEmpty()
+
+        if (party.isNotBlank()) {
+            matchedCategoryId =
+                transactionDao.getCategoryIdForActor(party)
         }
 
-        // 1. Tiered Keyword Matching
         if (matchedCategoryId == null) {
-            // First pass: Match against Party Name and Account Number (Account is critical for Paybills)
-            for (cat in categories) {
-                val keywords = cat.keywords.split(",")
+
+            for (category in categories) {
+
+                val keywords = category.keywords.split(",")
+
                 for (keyword in keywords) {
+
                     val kw = keyword.trim().uppercase()
-                    if (kw.isNotEmpty() && (party.contains(kw) || account.contains(kw))) {
-                        matchedCategoryId = cat.id
+
+                    if (
+                        kw.isNotBlank() &&
+                        (party.contains(kw) || account.contains(kw))
+                    ) {
+                        matchedCategoryId = category.id
                         break
                     }
                 }
+
                 if (matchedCategoryId != null) break
             }
         }
 
-        // 2. Behavioral Learning: Recurring Pattern Detection (Rent, Salary, etc.)
         if (matchedCategoryId == null) {
-            matchedCategoryId = detectBehavioralCategory(transaction)
+            matchedCategoryId =
+                detectBehavioralCategory(transaction)
         }
 
-        // 3. Fallback to Type-based defaults
         if (matchedCategoryId == null) {
-            if (transaction.type == "Sent" || transaction.type == "Buy Goods" || transaction.type == "Paybill") {
-                 matchedCategoryId = categories.find { it.name.contains("Transfer", ignoreCase = true) }?.id
-            } else if (transaction.type == "Received") {
-                 matchedCategoryId = categories.find { it.name.contains("Income", ignoreCase = true) }?.id
+
+            matchedCategoryId = when (transaction.type) {
+
+                "Sent",
+                "Buy Goods",
+                "Paybill" -> {
+                    categories.find {
+                        it.name.contains("Transfer", true)
+                    }?.id
+                }
+
+                "Received" -> {
+                    categories.find {
+                        it.name.contains("Income", true)
+                    }?.id
+                }
+
+                else -> null
             }
         }
 
-        // If still null, default to "Uncategorized" category ID
         if (matchedCategoryId == null) {
-            matchedCategoryId = categories.find { it.name.equals("Uncategorized", ignoreCase = true) }?.id
+            matchedCategoryId = categories.find {
+                it.name.equals("Uncategorized", true)
+            }?.id
         }
 
-        // Final fallback: if "Uncategorized" still not found, we use the first available category
-        // or null, but we MUST avoid a hardcoded "1" that might not exist.
-        return transaction.copy(categoryId = matchedCategoryId ?: categories.firstOrNull()?.id)
+        return transaction.copy(
+            categoryId = matchedCategoryId
+                ?: categories.firstOrNull()?.id
+        )
     }
 
-    private suspend fun detectBehavioralCategory(transaction: TransactionEntity): Int? {
-        val party = transaction.partyName.trim().uppercase()
-        if (party.isEmpty()) return null
+    private suspend fun detectBehavioralCategory(
+        transaction: TransactionEntity
+    ): Int? {
 
-        // 1. Look for recurring patterns (e.g., Rent, Salary)
-        // Check if this party appears around the same day of the month (+/- 3 days) in previous months
-        val calendar = Calendar.getInstance()
-        calendar.timeInMillis = transaction.timestamp
-        val dayOfMonth = calendar.get(Calendar.DAY_OF_MONTH)
-        
-        // Look back at transactions for this party
-        val previousTransactions = transactionDao.getAllTransactions().firstOrNull()?.filter {
-            it.partyName.trim().uppercase() == party && it.categoryId != null
-        } ?: emptyList()
+        val party =
+            transaction.partyName.trim().uppercase()
 
-        if (previousTransactions.size >= 2) {
-            // Check if at least 2 previous transactions were on a similar day of the month
-            val similarDayCount = previousTransactions.count { prev ->
-                val prevCal = Calendar.getInstance()
-                prevCal.timeInMillis = prev.timestamp
-                val prevDay = prevCal.get(Calendar.DAY_OF_MONTH)
-                Math.abs(prevDay - dayOfMonth) <= 3 || Math.abs(prevDay - dayOfMonth) >= 27
-            }
-
-            if (similarDayCount >= 2) {
-                // Return the most frequent category for this recurring transaction
-                return previousTransactions
-                    .groupBy { it.categoryId }
-                    .maxByOrNull { it.value.size }
-                    ?.key
-            }
+        if (party.isBlank()) {
+            return null
         }
 
-        return null
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = transaction.timestamp
+        }
+
+        val dayOfMonth =
+            calendar.get(Calendar.DAY_OF_MONTH)
+
+        val previousTransactions =
+            transactionDao.getCategorizedTransactionsByPartyName(party)
+
+        if (previousTransactions.size < 2) {
+            return null
+        }
+
+        val similarDayCount =
+            previousTransactions.count { previous ->
+
+                val previousCalendar = Calendar.getInstance().apply {
+                    timeInMillis = previous.timestamp
+                }
+
+                val previousDay =
+                    previousCalendar.get(Calendar.DAY_OF_MONTH)
+
+                abs(previousDay - dayOfMonth) <= 3 ||
+                    abs(previousDay - dayOfMonth) >= 27
+            }
+
+        if (similarDayCount < 2) {
+            return null
+        }
+
+        return previousTransactions
+            .groupBy { it.categoryId }
+            .maxByOrNull { it.value.size }
+            ?.key
     }
 
-    suspend fun importData(transactions: List<TransactionEntity>): Int {
+    suspend fun importData(
+        transactions: List<TransactionEntity>
+    ): Int {
+
         return withContext(Dispatchers.IO) {
-            val categories = transactionDao.getAllCategoriesList()
+
+            val categories = ensureDefaultCategoriesExist()
+
             var importedCount = 0
 
-            for (t in transactions) {
-                // Try to categorize if missing
-                val transactionToInsert = if (t.categoryId == null) {
-                    categorizeTransaction(t, categories)
-                } else {
-                    t
+            for (transaction in transactions) {
+
+                val transactionToInsert =
+                    if (transaction.categoryId == null) {
+                        categorizeTransaction(transaction, categories)
+                    } else {
+                        transaction
+                    }
+
+                if (transactionToInsert.categoryId == null) {
+                    continue
                 }
 
                 try {
-                    val result = transactionDao.insertTransaction(transactionToInsert)
+
+                    val result =
+                        transactionDao.insertTransaction(
+                            transactionToInsert
+                        )
+
                     if (result != -1L) {
                         importedCount++
                     }
+
                 } catch (e: Exception) {
-                    // Ignore duplicates
+                    Log.e(TAG, "Import failed.", e)
                 }
             }
+
             importedCount
         }
     }
 
     suspend fun syncTransactions(): Int {
+
         return withContext(Dispatchers.IO) {
-            // 1. Ensure categories exist
-            if (transactionDao.getCategoryCount() == 0) {
-                val defaults = CategoryUtils.getDefaultCategories()
-                for (category in defaults) {
-                    transactionDao.insertCategory(category)
-                }
-                cachedCategories = null // Invalidate cache after initial setup
-            } else {
-                // Ensure "Uncategorized" exists for existing users
-                val allCats = getCategoriesCached()
-                if (allCats.none { it.name.equals("Uncategorized", ignoreCase = true) }) {
-                    transactionDao.insertCategory(CategoryEntity(name = "Uncategorized", keywords = "UNCATEGORIZED", colorHex = CategoryUtils.getDefaultColorHex(0)))
-                    cachedCategories = null // Invalidate cache
-                }
-            }
 
-            val categories = getCategoriesCached()
+            syncMutex.withLock {
 
-            // 2. Read and parse SMS incrementally using SharedPreferences
-            val prefs = context.getSharedPreferences("pocketbudget_prefs", Context.MODE_PRIVATE)
-            val lastSyncTime = prefs.getLong("last_sms_sync_timestamp", 0L)
+                val categories = ensureDefaultCategoriesExist()
 
-            // Read messages after the last sync timestamp
-            val messages = smsReader.readMpesaMessages(lastSyncTime)
+                val prefs = context.getSharedPreferences(
+                    PREF_NAME,
+                    Context.MODE_PRIVATE
+                )
 
-            var newCount = 0
-            var maxTimestamp = lastSyncTime
+                val lastSyncTime =
+                    prefs.getLong(
+                        KEY_LAST_SMS_SYNC_TIMESTAMP,
+                        0L
+                    )
 
-            for (smsData in messages) {
-                // Update max timestamp seen
-                if (smsData.date > maxTimestamp) {
-                    maxTimestamp = smsData.date
-                }
+                val messages =
+                    smsReader.readMpesaMessages(lastSyncTime)
 
-                val transaction = MpesaParser.parse(smsData.body, smsData.date)
-                if (transaction != null) {
-                    // Pre-fill fullSmsBody for old transactions if needed
-                    val categorized = categorizeTransaction(transaction, categories)
+                var newCount = 0
+                var maxTimestamp = lastSyncTime
+
+                for (smsData in messages) {
+
+                    if (smsData.date > maxTimestamp) {
+                        maxTimestamp = smsData.date
+                    }
+
+                    val transaction =
+                        MpesaParser.parse(
+                            smsData.body,
+                            smsData.date
+                        ) ?: continue
+
+                    val categorized =
+                        categorizeTransaction(
+                            transaction,
+                            categories
+                        )
+
+                    if (categorized.categoryId == null) {
+                        continue
+                    }
+
                     try {
-                        val result = transactionDao.insertTransaction(categorized)
+
+                        val result =
+                            transactionDao.insertTransaction(
+                                categorized
+                            )
+
                         if (result != -1L) {
                             newCount++
                         }
+
                     } catch (e: Exception) {
-                        // Ignore
+                        Log.e(
+                            TAG,
+                            "Failed synced transaction.",
+                            e
+                        )
                     }
                 }
-            }
 
-            // Update the sync timestamp only if we processed messages
-            if (maxTimestamp > lastSyncTime) {
-                prefs.edit().putLong("last_sms_sync_timestamp", maxTimestamp).apply()
-            }
+                if (maxTimestamp > lastSyncTime) {
 
-            newCount
+                    prefs.edit()
+                        .putLong(
+                            KEY_LAST_SMS_SYNC_TIMESTAMP,
+                            maxTimestamp
+                        )
+                        .commit()
+                }
+
+                newCount
+            }
         }
     }
 
-    /**
-     * Resync ALL M-Pesa SMS from the inbox (from the very beginning, timestamp = 0).
-     * Only inserts transactions that are missing from the database.
-     * Existing transactions are safely skipped via the unique transactionId constraint (INSERT OR IGNORE).
-     * Also updates last_sms_sync_timestamp if newer messages are found, keeping the
-     * incremental dashboard sync aligned.
-     */
     suspend fun resyncAllTransactions(): Int {
+
         return withContext(Dispatchers.IO) {
-            // 1. Ensure default categories exist
-            if (transactionDao.getCategoryCount() == 0) {
-                val defaults = CategoryUtils.getDefaultCategories()
-                for (category in defaults) {
-                    transactionDao.insertCategory(category)
-                }
-            } else {
-                // Ensure "Uncategorized" exists for existing users
-                val allCats = transactionDao.getAllCategoriesList()
-                if (allCats.none { it.name.equals("Uncategorized", ignoreCase = true) }) {
-                    transactionDao.insertCategory(CategoryEntity(name = "Uncategorized", keywords = "UNCATEGORIZED", colorHex = CategoryUtils.getDefaultColorHex(0)))
-                }
-            }
 
-            val categories = transactionDao.getAllCategoriesList()
+            syncMutex.withLock {
 
-            // 2. Read ALL M-Pesa SMS from the very beginning (afterTimestamp = 0L)
-            val messages = smsReader.readMpesaMessages(0L)
+                val categories = ensureDefaultCategoriesExist()
 
-            var newCount = 0
-            var maxTimestamp = 0L
+                val messages =
+                    smsReader.readMpesaMessages(0L)
 
-            for (smsData in messages) {
-                // Track the latest timestamp found across all SMS
-                if (smsData.date > maxTimestamp) {
-                    maxTimestamp = smsData.date
-                }
+                var newCount = 0
+                var maxTimestamp = 0L
 
-                val transaction = MpesaParser.parse(smsData.body, smsData.date)
-                if (transaction != null) {
-                    val categorized = categorizeTransaction(transaction, categories)
+                for (smsData in messages) {
+
+                    if (smsData.date > maxTimestamp) {
+                        maxTimestamp = smsData.date
+                    }
+
+                    val transaction =
+                        MpesaParser.parse(
+                            smsData.body,
+                            smsData.date
+                        ) ?: continue
+
+                    val categorized =
+                        categorizeTransaction(
+                            transaction,
+                            categories
+                        )
+
+                    if (categorized.categoryId == null) {
+                        continue
+                    }
+
                     try {
-                        // INSERT OR IGNORE: duplicates are silently skipped
-                        val result = transactionDao.insertTransaction(categorized)
+
+                        val result =
+                            transactionDao.insertTransaction(
+                                categorized
+                            )
+
                         if (result != -1L) {
-                            newCount++ // Only counts genuinely new/missing transactions
+                            newCount++
                         }
+
                     } catch (e: Exception) {
-                        // Ignore individual failures; continue processing the rest
+                        Log.e(
+                            TAG,
+                            "Resync insert failed.",
+                            e
+                        )
                     }
                 }
-            }
 
-            // 3. Advance last_sms_sync_timestamp if resync found messages newer than what
-            //    the incremental sync had recorded. This prevents the dashboard sync from
-            //    re-scanning already-processed messages on its next run.
-            val prefs = context.getSharedPreferences("pocketbudget_prefs", Context.MODE_PRIVATE)
-            val lastSyncTime = prefs.getLong("last_sms_sync_timestamp", 0L)
-            if (maxTimestamp > lastSyncTime) {
-                prefs.edit().putLong("last_sms_sync_timestamp", maxTimestamp).apply()
-            }
+                val prefs = context.getSharedPreferences(
+                    PREF_NAME,
+                    Context.MODE_PRIVATE
+                )
 
-            newCount
+                val lastSyncTime =
+                    prefs.getLong(
+                        KEY_LAST_SMS_SYNC_TIMESTAMP,
+                        0L
+                    )
+
+                if (maxTimestamp > lastSyncTime) {
+
+                    prefs.edit()
+                        .putLong(
+                            KEY_LAST_SMS_SYNC_TIMESTAMP,
+                            maxTimestamp
+                        )
+                        .commit()
+                }
+
+                newCount
+            }
         }
     }
 

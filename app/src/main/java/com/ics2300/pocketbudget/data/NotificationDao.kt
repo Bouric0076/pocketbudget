@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NotificationDao {
+
     @Query("SELECT * FROM notifications ORDER BY timestamp DESC")
     fun getAllNotifications(): Flow<List<NotificationEntity>>
 
@@ -24,7 +25,7 @@ interface NotificationDao {
 
     @Query("DELETE FROM notifications")
     suspend fun deleteAllNotifications()
-    
+
     @Query("DELETE FROM notifications WHERE timestamp < :timestamp")
     suspend fun deleteOldNotifications(timestamp: Long)
 }
