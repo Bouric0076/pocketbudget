@@ -4,8 +4,8 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:padding="10dp"
-    android:layout_marginBottom="6dp"
+    android:padding="14dp"
+    android:layout_marginBottom="8dp"
     android:background="@drawable/bg_transaction_item"
     android:clickable="true"
     android:focusable="true"
@@ -14,8 +14,8 @@
     <!-- img_transaction_icon — kept same ID -->
     <ImageView
         android:id="@+id/img_transaction_icon"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
         android:padding="9dp"
         android:background="@drawable/bg_txn_icon"
         android:layout_marginEnd="10dp"
@@ -32,7 +32,7 @@
             android:id="@+id/text_party_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="13sp"
+            android:textSize="15sp"
             android:fontFamily="sans-serif-medium"
             android:textColor="@color/text_primary"
             android:ellipsize="end"
@@ -49,7 +49,7 @@
                 android:id="@+id/text_date"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="10sp"
+                android:textSize="12sp"
                 android:fontFamily="sans-serif"
                 android:textColor="@color/text_tertiary"/>
 
@@ -67,7 +67,7 @@
                 android:id="@+id/text_type"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="9sp"
+                android:textSize="11sp"
                 android:fontFamily="sans-serif"
                 android:paddingStart="6dp"
                 android:paddingEnd="6dp"
@@ -90,7 +90,7 @@
             android:id="@+id/text_amount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="13sp"
+            android:textSize="15sp"
             android:fontFamily="sans-serif-medium"
             android:textColor="@color/text_primary"/>
     </LinearLayout>

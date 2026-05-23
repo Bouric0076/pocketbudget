@@ -1,6 +1,6 @@
 package com.ics2300.pocketbudget.ui
 
-import android.app.AlertDialog
+import android.graphics.Typeface
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -29,10 +29,13 @@ import com.ics2300.pocketbudget.utils.TransactionGrouper
 import com.ics2300.pocketbudget.ui.TransactionListItem
 
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.ics2300.pocketbudget.ui.dashboard.SyncResult
 import com.ics2300.pocketbudget.utils.AnalyticsUtils
 import com.ics2300.pocketbudget.utils.SecurityUtils
 import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -43,6 +46,7 @@ class DashboardFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: DashboardViewModel by viewModels()
+    private var latestRecentTransactions: List<TransactionEntity> = emptyList()
 
     private val requestPermissionsLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -70,9 +74,6 @@ class DashboardFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        // Auto-check permissions to ensure SmsReceiver works
-        checkPermissionsOnStart()
-        
         // Update Privacy Eye State
         updatePrivacyEyeState()
         
@@ -96,27 +97,6 @@ class DashboardFragment : Fragment() {
         }
     }
 
-    private fun checkPermissionsOnStart() {
-        val permissions = mutableListOf(
-            android.Manifest.permission.READ_SMS,
-            android.Manifest.permission.RECEIVE_SMS
-        )
-        
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
-        
-        val allGranted = permissions.all {
-            ContextCompat.checkSelfPermission(requireContext(), it) == PackageManager.PERMISSION_GRANTED
-        }
-        
-        if (!allGranted) {
-            // Request permissions if not granted (enables Auto-Sync/Receiver)
-            // The launcher callback will trigger a sync if granted.
-            requestPermissionsLauncher.launch(permissions.toTypedArray())
-        }
-    }
-
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -135,8 +115,9 @@ class DashboardFragment : Fragment() {
             updateDashboardStats(stats)
         }
 
-        // Observe Categories to ensure they are loaded for details view
-        viewModel.categories.observe(viewLifecycleOwner) { /* Ensure LiveData is active */ }
+        viewModel.categories.observe(viewLifecycleOwner) {
+            bindRecentTransactions(latestRecentTransactions)
+        }
 
         return root
     }
@@ -192,6 +173,11 @@ class DashboardFragment : Fragment() {
         val isPrivacy = SecurityUtils.isPrivacyModeEnabled(context)
         binding.textIncomeAmount.text = CurrencyFormatter.formatKsh(stats.totalIncome, isPrivacy)
         binding.textExpenseAmount.text = CurrencyFormatter.formatKsh(stats.totalExpense, isPrivacy)
+        binding.textTxnCount.text = if (isPrivacy) {
+            "••"
+        } else {
+            stats.transactionCount.toString()
+        }
         
         val netFlow = stats.totalIncome - stats.totalExpense
         binding.textBalanceSummary.text = "Net: ${CurrencyFormatter.formatKsh(netFlow, isPrivacy)}"
@@ -234,11 +220,31 @@ class DashboardFragment : Fragment() {
         
         // Initial state
         updateTabStyles(TimeRange.DAY)
+        updatePeriodLabel(TimeRange.DAY)
     }
 
     private fun selectTimeRange(range: TimeRange) {
         viewModel.setTimeRange(range)
         updateTabStyles(range)
+        updatePeriodLabel(range)
+    }
+
+    private fun updatePeriodLabel(range: TimeRange) {
+        val calendar = Calendar.getInstance()
+        binding.textCurrentPeriod.text = when (range) {
+            TimeRange.DAY -> SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(calendar.time)
+            TimeRange.WEEK -> {
+                val start = calendar.clone() as Calendar
+                start.set(Calendar.DAY_OF_WEEK, start.firstDayOfWeek)
+                val end = start.clone() as Calendar
+                end.add(Calendar.DAY_OF_WEEK, 6)
+                val dayFormat = SimpleDateFormat("d MMM", Locale.getDefault())
+                "${dayFormat.format(start.time)} - ${dayFormat.format(end.time)}"
+            }
+            TimeRange.MONTH -> SimpleDateFormat("MMM yyyy", Locale.getDefault()).format(calendar.time)
+            TimeRange.YEAR -> calendar.get(Calendar.YEAR).toString()
+            TimeRange.ALL -> "All time"
+        }
     }
 
     private fun updateTabStyles(selected: TimeRange) {
@@ -251,13 +257,13 @@ class DashboardFragment : Fragment() {
 
         tabs.forEach { (range, view) ->
             if (range == selected) {
-                view.setBackgroundResource(R.drawable.bg_button_primary)
-                view.setTextColor(requireContext().getColor(R.color.brand_dark_green))
-                view.setTypeface(null, android.graphics.Typeface.BOLD)
+                view.setBackgroundResource(R.drawable.bg_tab_selected)
+                view.setTextColor(requireContext().getColor(R.color.white))
+                view.setTypeface(null, Typeface.BOLD)
             } else {
-                view.setBackgroundResource(R.drawable.bg_button_secondary)
-                view.setTextColor(requireContext().getColor(R.color.text_on_dark))
-                view.setTypeface(null, android.graphics.Typeface.NORMAL)
+                view.setBackgroundResource(R.drawable.bg_tab_default)
+                view.setTextColor(requireContext().getColor(R.color.text_secondary))
+                view.setTypeface(null, Typeface.NORMAL)
             }
         }
     }
@@ -284,32 +290,38 @@ class DashboardFragment : Fragment() {
         binding.recyclerRecentTransactions.layoutManager = LinearLayoutManager(context)
         
         viewModel.recentTransactions.observe(viewLifecycleOwner) { transactions ->
-            val categories = viewModel.categories.value
-            val items = transactions.map { transaction ->
-                val category = categories?.find { it.id == transaction.categoryId }
-                TransactionListItem.Transaction(transaction, category)
-            }
-            adapter.submitList(items)
-            
-            if (transactions.isEmpty()) {
-                binding.recyclerRecentTransactions.visibility = View.GONE
-                binding.layoutEmptyState.root.visibility = View.VISIBLE
-                binding.layoutEmptyState.textEmptyTitle.text = "No Recent Transactions"
-                binding.layoutEmptyState.textEmptyMessage.text = "Add a transaction manually or sync from SMS."
-                binding.layoutEmptyState.btnEmptyAction.visibility = View.VISIBLE
-                binding.layoutEmptyState.btnEmptyAction.setOnClickListener {
-                    val bottomSheet = AddTransactionBottomSheet()
-                    bottomSheet.show(parentFragmentManager, AddTransactionBottomSheet.TAG)
-                }
-            } else {
-                binding.recyclerRecentTransactions.visibility = View.VISIBLE
-                binding.layoutEmptyState.root.visibility = View.GONE
-            }
+            latestRecentTransactions = transactions
+            bindRecentTransactions(transactions)
         }
         
         binding.btnSeeAll.setOnClickListener {
             // Navigate to transactions tab? For now just toast
             Toast.makeText(context, "View all in Transactions Tab", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun bindRecentTransactions(transactions: List<TransactionEntity>) {
+        val adapter = binding.recyclerRecentTransactions.adapter as? TransactionAdapter ?: return
+        val categories = viewModel.categories.value.orEmpty()
+        val items = transactions.map { transaction ->
+            val category = categories.find { it.id == transaction.categoryId }
+            TransactionListItem.Transaction(transaction, category)
+        }
+        adapter.submitList(items)
+
+        if (transactions.isEmpty()) {
+            binding.recyclerRecentTransactions.visibility = View.GONE
+            binding.layoutEmptyState.root.visibility = View.VISIBLE
+            binding.layoutEmptyState.textEmptyTitle.text = "No Recent Transactions"
+            binding.layoutEmptyState.textEmptyMessage.text = "Add a transaction manually or sync from SMS."
+            binding.layoutEmptyState.btnEmptyAction.visibility = View.VISIBLE
+            binding.layoutEmptyState.btnEmptyAction.setOnClickListener {
+                val bottomSheet = AddTransactionBottomSheet()
+                bottomSheet.show(parentFragmentManager, AddTransactionBottomSheet.TAG)
+            }
+        } else {
+            binding.recyclerRecentTransactions.visibility = View.VISIBLE
+            binding.layoutEmptyState.root.visibility = View.GONE
         }
     }
 
@@ -369,7 +381,7 @@ class DashboardFragment : Fragment() {
         if (allGranted) {
             syncSms()
         } else {
-            requestPermissionsLauncher.launch(permissions.toTypedArray())
+            showPermissionRationaleDialog()
         }
     }
     
@@ -378,10 +390,12 @@ class DashboardFragment : Fragment() {
     }
 
     private fun showPermissionRationaleDialog() {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Permissions Required")
-            .setMessage("PocketBudget needs SMS and Notification permissions to automatically track your M-Pesa transactions. This saves you from manual entry.")
-            .setPositiveButton("Grant") { _, _ ->
+        showActionSheet(
+            title = "Allow automatic tracking",
+            message = "PocketBudget needs SMS access to read M-Pesa messages and notification permission for alerts. You can still add transactions manually.",
+            primary = "Grant permissions",
+            secondary = "Not now",
+            onPrimary = {
                 val permissions = mutableListOf(
                     android.Manifest.permission.READ_SMS, 
                     android.Manifest.permission.RECEIVE_SMS
@@ -391,22 +405,48 @@ class DashboardFragment : Fragment() {
                 }
                 requestPermissionsLauncher.launch(permissions.toTypedArray())
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        )
     }
 
     private fun showSettingsDialog() {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Permissions Denied")
-            .setMessage("SMS permissions are permanently denied. Please enable them in Settings to use the Sync feature.")
-            .setPositiveButton("Settings") { _, _ ->
+        showActionSheet(
+            title = "Enable permissions in Settings",
+            message = "SMS permission is blocked. Open Android Settings and enable SMS access to use Sync.",
+            primary = "Open Settings",
+            secondary = "Cancel",
+            onPrimary = {
                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                 val uri = Uri.fromParts("package", requireContext().packageName, null)
                 intent.data = uri
                 startActivity(intent)
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        )
+    }
+
+    private fun showActionSheet(
+        title: String,
+        message: String,
+        primary: String,
+        secondary: String,
+        onPrimary: () -> Unit
+    ) {
+        val dialog = BottomSheetDialog(requireContext())
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_action_prompt, null)
+        view.findViewById<android.widget.TextView>(R.id.text_prompt_title).text = title
+        view.findViewById<android.widget.TextView>(R.id.text_prompt_message).text = message
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_prompt_primary).apply {
+            text = primary
+            setOnClickListener {
+                dialog.dismiss()
+                onPrimary()
+            }
+        }
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_prompt_secondary).apply {
+            text = secondary
+            setOnClickListener { dialog.dismiss() }
+        }
+        dialog.setContentView(view)
+        dialog.show()
     }
 
     override fun onDestroyView() {

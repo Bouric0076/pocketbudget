@@ -217,39 +217,56 @@ class DashboardViewModel @Inject constructor(
 
     private fun getTimestampRange(range: TimeRange): Pair<Long, Long> {
         val calendar = Calendar.getInstance()
-        val end = calendar.timeInMillis
+        val start = calendar.clone() as Calendar
+        val end = calendar.clone() as Calendar
 
         when (range) {
 
             TimeRange.DAY -> {
-                calendar.set(Calendar.HOUR_OF_DAY, 0)
-                calendar.set(Calendar.MINUTE, 0)
-                calendar.set(Calendar.SECOND, 0)
-                calendar.set(Calendar.MILLISECOND, 0)
+                start.set(Calendar.HOUR_OF_DAY, 0)
+                start.set(Calendar.MINUTE, 0)
+                start.set(Calendar.SECOND, 0)
+                start.set(Calendar.MILLISECOND, 0)
+                end.set(Calendar.HOUR_OF_DAY, 23)
+                end.set(Calendar.MINUTE, 59)
+                end.set(Calendar.SECOND, 59)
+                end.set(Calendar.MILLISECOND, 999)
             }
 
             TimeRange.WEEK -> {
-                calendar.set(Calendar.DAY_OF_WEEK, calendar.firstDayOfWeek)
-                calendar.set(Calendar.HOUR_OF_DAY, 0)
-                calendar.set(Calendar.MINUTE, 0)
-                calendar.set(Calendar.SECOND, 0)
-                calendar.set(Calendar.MILLISECOND, 0)
+                start.set(Calendar.DAY_OF_WEEK, start.firstDayOfWeek)
+                start.set(Calendar.HOUR_OF_DAY, 0)
+                start.set(Calendar.MINUTE, 0)
+                start.set(Calendar.SECOND, 0)
+                start.set(Calendar.MILLISECOND, 0)
+                end.timeInMillis = start.timeInMillis
+                end.add(Calendar.DAY_OF_WEEK, 6)
+                end.set(Calendar.HOUR_OF_DAY, 23)
+                end.set(Calendar.MINUTE, 59)
+                end.set(Calendar.SECOND, 59)
+                end.set(Calendar.MILLISECOND, 999)
             }
 
             TimeRange.MONTH -> {
-                calendar.set(Calendar.DAY_OF_MONTH, 1)
-                calendar.set(Calendar.HOUR_OF_DAY, 0)
-                calendar.set(Calendar.MINUTE, 0)
-                calendar.set(Calendar.SECOND, 0)
-                calendar.set(Calendar.MILLISECOND, 0)
+                start.set(Calendar.DAY_OF_MONTH, 1)
+                start.set(Calendar.HOUR_OF_DAY, 0)
+                start.set(Calendar.MINUTE, 0)
+                start.set(Calendar.SECOND, 0)
+                start.set(Calendar.MILLISECOND, 0)
+                end.timeInMillis = start.timeInMillis
+                end.add(Calendar.MONTH, 1)
+                end.add(Calendar.MILLISECOND, -1)
             }
 
             TimeRange.YEAR -> {
-                calendar.set(Calendar.DAY_OF_YEAR, 1)
-                calendar.set(Calendar.HOUR_OF_DAY, 0)
-                calendar.set(Calendar.MINUTE, 0)
-                calendar.set(Calendar.SECOND, 0)
-                calendar.set(Calendar.MILLISECOND, 0)
+                start.set(Calendar.DAY_OF_YEAR, 1)
+                start.set(Calendar.HOUR_OF_DAY, 0)
+                start.set(Calendar.MINUTE, 0)
+                start.set(Calendar.SECOND, 0)
+                start.set(Calendar.MILLISECOND, 0)
+                end.timeInMillis = start.timeInMillis
+                end.add(Calendar.YEAR, 1)
+                end.add(Calendar.MILLISECOND, -1)
             }
 
             TimeRange.ALL -> {
@@ -257,7 +274,7 @@ class DashboardViewModel @Inject constructor(
             }
         }
 
-        return Pair(calendar.timeInMillis, end)
+        return Pair(start.timeInMillis, end.timeInMillis)
     }
 }
 

@@ -1,7 +1,5 @@
 package com.ics2300.pocketbudget.ui
 
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.text.InputType
 import android.view.LayoutInflater
@@ -11,7 +9,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -91,12 +89,8 @@ class BudgetFragment : Fragment() {
             editAmount.setText(item.limitAmount.toInt().toString())
         }
 
-        val dialog = AlertDialog.Builder(requireContext())
-            .setView(dialogView)
-            .create()
-        
-        // Transparent background for rounded corners
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        val dialog = BottomSheetDialog(requireContext())
+        dialog.setContentView(dialogView)
 
         btnSave.setOnClickListener {
             val amountStr = editAmount.text.toString()

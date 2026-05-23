@@ -131,21 +131,21 @@ object NotificationHelper {
         actionData: String? = null,
         extraActions: List<NotificationCompat.Action> = emptyList(),
         groupId: String? = null
-    ) {
+    ): Boolean {
         val app = context.applicationContext as? MainApplication
         if (app == null) {
             Log.e(TAG, "Application context is not MainApplication.")
-            return
+            return false
         }
 
         if (!areNotificationsEnabled(context)) {
             Log.i(TAG, "Notifications are disabled by user preference. Notification skipped.")
-            return
+            return false
         }
 
         if (!hasNotificationPermission(context)) {
             Log.w(TAG, "POST_NOTIFICATIONS permission not granted. Notification skipped.")
-            return
+            return false
         }
 
         notificationScope.launch {
@@ -235,6 +235,8 @@ object NotificationHelper {
                 Log.e(TAG, "Failed to create or show notification.", e)
             }
         }
+
+        return true
     }
 
     private fun showGroupSummary(
@@ -516,7 +518,7 @@ object NotificationHelper {
         amount: Double,
         daysUntil: Int,
         isSnoozed: Boolean = false
-    ) {
+    ): Boolean {
         val isPrivacyMode = SecurityUtils.isPrivacyModeEnabled(context)
         val amountText = CurrencyFormatter.formatKsh(amount, isPrivacyMode)
 
@@ -560,7 +562,7 @@ object NotificationHelper {
             snoozePendingIntent
         ).build()
 
-        showNotification(
+        return showNotification(
             context = context,
             channelId = CHANNEL_BILL_REMINDERS,
             title = titleText,

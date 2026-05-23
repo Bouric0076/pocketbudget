@@ -14,8 +14,10 @@ import com.ics2300.pocketbudget.databinding.ItemTransactionBinding
 import com.ics2300.pocketbudget.utils.CurrencyFormatter
 import com.ics2300.pocketbudget.utils.SecurityUtils
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 class TransactionAdapter(
     private val onTransactionClick: (TransactionEntity) -> Unit = {}
@@ -138,26 +140,42 @@ class TransactionAdapter(
         // ── Helpers ───────────────────────────────────────────────────────
 
         private fun formatTimestamp(ts: Long): String {
-            val now     = System.currentTimeMillis()
-            val diff    = now - ts
-            val oneDay  = 86_400_000L
-            return when {
-                diff < oneDay -> {
-                    // Today — show time only
-                    SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(ts))
-                        .let { "Today, $it" }
-                }
-                diff < 2 * oneDay -> {
-                    SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(ts))
-                        .let { "Yesterday, $it" }
-                }
-                diff < 7 * oneDay -> {
-                    SimpleDateFormat("EEE, h:mm a", Locale.getDefault()).format(Date(ts))
-                }
-                else -> {
-                    SimpleDateFormat("dd MMM, h:mm a", Locale.getDefault()).format(Date(ts))
-                }
+            val displayTimeZone = TimeZone.getTimeZone("Africa/Nairobi")
+            val now = Calendar.getInstance(displayTimeZone)
+            val transactionDate = Calendar.getInstance(displayTimeZone).apply {
+                timeInMillis = ts
             }
+            val yesterday = (now.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_YEAR, -1)
+            }
+            val oneWeekAgo = (now.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_YEAR, -6)
+            }
+            val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault()).apply {
+                timeZone = displayTimeZone
+            }
+
+            return when {
+                isSameLocalDay(now, transactionDate) -> {
+                    "Today, ${timeFormat.format(Date(ts))}"
+                }
+                isSameLocalDay(yesterday, transactionDate) -> {
+                    "Yesterday, ${timeFormat.format(Date(ts))}"
+                }
+                transactionDate.after(oneWeekAgo) -> {
+                    SimpleDateFormat("EEE, h:mm a", Locale.getDefault()).apply {
+                        timeZone = displayTimeZone
+                    }.format(Date(ts))
+                }
+                else -> SimpleDateFormat("dd MMM, h:mm a", Locale.getDefault()).apply {
+                    timeZone = displayTimeZone
+                }.format(Date(ts))
+            }
+        }
+
+        private fun isSameLocalDay(first: Calendar, second: Calendar): Boolean {
+            return first.get(Calendar.YEAR) == second.get(Calendar.YEAR) &&
+                first.get(Calendar.DAY_OF_YEAR) == second.get(Calendar.DAY_OF_YEAR)
         }
 
         private fun categoryPillColors(name: String): Pair<Int, Int> = when (name.lowercase()) {

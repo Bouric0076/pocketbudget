@@ -1,6 +1,7 @@
 package com.ics2300.pocketbudget.ui
 
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -8,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Toast
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.chip.Chip
 import com.ics2300.pocketbudget.MainApplication
@@ -70,14 +72,15 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
         binding.toggleType.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
                 isIncome = checkedId == R.id.btn_income
+                userSelectedCategory = false
+                applyDefaultCategory()
+                updateCategoryControls()
                 updateSaveButtonLabel()
-                if (!userSelectedCategory) {
-                    applyDefaultCategory()
-                }
             }
         }
 
         binding.toggleType.check(R.id.btn_expense)
+        updateCategoryControls()
     }
 
     private fun setupCategories() {
@@ -98,6 +101,7 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
             ) {
                 applyDefaultCategory()
             }
+            updateCategoryControls()
             
             binding.editCategory.setOnItemClickListener { _, _, position, _ ->
                 selectedCategoryId = categories[position].id
@@ -116,6 +120,16 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
                 text = category.name
                 isCheckable = true
                 isClickable = true
+                setTextColor(requireContext().getColor(R.color.text_primary))
+                chipBackgroundColor = ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(
+                        requireContext().getColor(R.color.onboarding_chip_green),
+                        requireContext().getColor(R.color.white)
+                    )
+                )
+                chipStrokeWidth = 1f
+                chipStrokeColor = ColorStateList.valueOf(Color.parseColor("#E1E6E2"))
                 shapeAppearanceModel =
                     shapeAppearanceModel.toBuilder()
                         .setAllCornerSizes(20f)
@@ -146,11 +160,21 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
             availableCategories.firstOrNull {
                 it.name.equals("Uncategorized", ignoreCase = true)
             }
-        } ?: availableCategories.firstOrNull()
+        } ?: if (isIncome) {
+            null
+        } else {
+            availableCategories.firstOrNull()
+        }
 
         selectedCategoryId = defaultCategory?.id
         binding.editCategory.setText(defaultCategory?.name.orEmpty(), false)
         syncCheckedCategoryChip()
+    }
+
+    private fun updateCategoryControls() {
+        binding.textCategoryLabel.visibility = if (isIncome) View.GONE else View.VISIBLE
+        binding.chipGroupCategories.visibility = if (isIncome) View.GONE else View.VISIBLE
+        binding.layoutCategory.visibility = if (isIncome) View.GONE else View.VISIBLE
     }
 
     private fun syncCheckedCategoryChip() {
@@ -190,6 +214,11 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
         }
         binding.btnSaveTransaction.backgroundTintList =
             ColorStateList.valueOf(requireContext().getColor(color))
+        binding.btnSaveTransaction.setTextColor(requireContext().getColor(R.color.white))
+
+        listOf(binding.btnIncome, binding.btnExpense).forEach { button ->
+            button.setTextColor(requireContext().getColor(R.color.text_primary))
+        }
     }
 
     private fun setupSaveButton() {
@@ -198,6 +227,7 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
             val note = binding.editNote.text.toString()
             binding.layoutAmount.error = null
             binding.layoutCategory.error = null
+            binding.layoutFrequency.error = null
             
             if (amountStr.isBlank()) {
                 binding.layoutAmount.error = "Enter amount"
@@ -216,7 +246,11 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
 
             val categoryId = selectedCategoryId
             if (categoryId == null) {
-                binding.layoutCategory.error = "Choose a category"
+                if (isIncome) {
+                    Toast.makeText(context, "Income category is not ready yet. Try again.", Toast.LENGTH_SHORT).show()
+                } else {
+                    binding.layoutCategory.error = "Choose a category"
+                }
                 return@setOnClickListener
             }
 
@@ -224,6 +258,11 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
             
             if (isRecurring) {
                 val frequency = binding.editFrequency.text.toString()
+                if (frequency.isBlank()) {
+                    binding.layoutFrequency.error = "Choose a frequency"
+                    return@setOnClickListener
+                }
+
                 val description = if (note.isNotBlank()) note else if (isIncome) "Recurring Income" else "Recurring Expense"
                 
                 viewModel.addRecurringTransaction(

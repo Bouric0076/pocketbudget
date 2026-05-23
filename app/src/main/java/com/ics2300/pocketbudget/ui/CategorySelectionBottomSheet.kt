@@ -5,8 +5,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.CategoryEntity
 import com.ics2300.pocketbudget.databinding.DialogCategorySelectionBinding
@@ -50,9 +50,8 @@ class CategorySelectionBottomSheet(
         val dialogView = LayoutInflater.from(requireContext())
             .inflate(R.layout.dialog_bulk_categorize_confirm, null)
             
-        val dialog = MaterialAlertDialogBuilder(requireContext())
-            .setView(dialogView)
-            .create()
+        val dialog = BottomSheetDialog(requireContext())
+        dialog.setContentView(dialogView)
             
         dialogView.findViewById<TextView>(R.id.text_bulk_message).text = 
             "We found similar transactions from '$partyName'. Would you like to categorize all of them as '${category.name}'?"

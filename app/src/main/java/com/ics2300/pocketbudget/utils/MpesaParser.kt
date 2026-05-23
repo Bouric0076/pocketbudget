@@ -4,6 +4,7 @@ import android.util.Log
 import com.ics2300.pocketbudget.data.TransactionEntity
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.TimeZone
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -11,6 +12,7 @@ object MpesaParser {
 
     private const val TAG = "MpesaParser"
     private const val DATE_FORMAT = "d/M/yy 'at' h:mm a"
+    private const val MPESA_TIME_ZONE = "Africa/Nairobi"
 
     private data class ParserRule(
         val pattern: Pattern,
@@ -315,6 +317,7 @@ object MpesaParser {
         return try {
             val format = SimpleDateFormat(DATE_FORMAT, Locale.ENGLISH).apply {
                 isLenient = false
+                timeZone = TimeZone.getTimeZone(MPESA_TIME_ZONE)
             }
 
             format.parse("$date at $time")?.time ?: System.currentTimeMillis()

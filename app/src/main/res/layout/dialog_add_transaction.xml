@@ -29,8 +29,8 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Add Transaction"
-            android:textSize="16sp"
+            android:text="Add transaction"
+            android:textSize="20sp"
             android:fontFamily="sans-serif-medium"
             android:textColor="@color/text_primary"/>
 
@@ -62,7 +62,7 @@
             <com.google.android.material.button.MaterialButtonToggleGroup
                 android:id="@+id/toggleType"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="46dp"
                 android:layout_marginBottom="20dp"
                 app:singleSelection="true"
                 app:selectionRequired="true"
@@ -95,7 +95,7 @@
                 android:id="@+id/layoutAmount"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="18dp"
                 android:hint="Amount"
                 style="@style/Widget.App.AmountInput"
                 app:prefixText="KES "
@@ -106,7 +106,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="numberDecimal"
-                    android:textSize="28sp"
+                    android:textSize="30sp"
                     android:fontFamily="sans-serif-medium"
                     android:textColor="@color/text_primary"/>
             </com.google.android.material.textfield.TextInputLayout>
@@ -116,7 +116,7 @@
                 android:id="@+id/layoutNote"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="18dp"
                 android:hint="Description (e.g. Naivas Supermarket)"
                 style="@style/Widget.App.RoundedInput"
                 app:startIconDrawable="@drawable/ic_pencil"
@@ -128,15 +128,18 @@
                     android:layout_height="wrap_content"
                     android:inputType="textCapWords"
                     android:textSize="14sp"
-                    android:fontFamily="sans-serif"/>
+                    android:fontFamily="sans-serif"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"/>
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Category quick chips -->
             <TextView
+                android:id="@+id/textCategoryLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="CATEGORY"
-                android:textSize="10sp"
+                android:text="Category"
+                android:textSize="12sp"
                 android:fontFamily="sans-serif-medium"
                 android:textColor="@color/text_tertiary"
                 android:letterSpacing="0.05"
@@ -146,7 +149,7 @@
                 android:id="@+id/chipGroupCategories"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp"
+                android:layout_marginBottom="12dp"
                 app:singleSelection="true"
                 app:selectionRequired="false"/>
 
@@ -155,7 +158,7 @@
                 android:id="@+id/layoutCategory"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="18dp"
                 android:hint="Or search all categories"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                 app:startIconDrawable="@drawable/ic_tag"
@@ -171,7 +174,9 @@
                     android:layout_height="wrap_content"
                     android:inputType="none"
                     android:textSize="13sp"
-                    android:fontFamily="sans-serif"/>
+                    android:fontFamily="sans-serif"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"/>
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- switchRecurring + label -->
@@ -237,16 +242,19 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="none"
-                    android:textSize="13sp"/>
+                    android:textSize="13sp"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"/>
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- btnSaveTransaction -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSaveTransaction"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
+                android:layout_height="54dp"
                 android:text="Save Transaction"
                 android:textSize="14sp"
+                android:textColor="@color/white"
                 android:fontFamily="sans-serif-medium"
                 app:cornerRadius="14dp"
                 app:backgroundTint="@color/brand_dark_green"

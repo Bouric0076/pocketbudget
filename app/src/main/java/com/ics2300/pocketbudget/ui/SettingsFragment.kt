@@ -19,14 +19,15 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.view.setPadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.ics2300.pocketbudget.MainApplication
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.CategoryEntity
@@ -118,12 +119,9 @@ class SettingsFragment : Fragment() {
         val btnBuy = dialogView.findViewById<android.widget.Button>(R.id.btn_buy_premium)
         val btnCancel = dialogView.findViewById<android.widget.TextView>(R.id.text_cancel)
 
-        val dialog = AlertDialog.Builder(requireContext())
-            .setView(dialogView)
-            .setCancelable(false)
-            .create()
-
-        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        val dialog = BottomSheetDialog(requireContext())
+        dialog.setContentView(dialogView)
+        dialog.setCancelable(false)
 
         btnBuy.setOnClickListener {
             PremiumManager.setPremiumStatus(requireContext(), true)
@@ -141,14 +139,15 @@ class SettingsFragment : Fragment() {
 
     private fun showPremiumLockedDialog(feature: String) {
         val featureName = PremiumManager.getFeatureName(feature)
-        AlertDialog.Builder(requireContext())
-            .setTitle("Premium Feature")
-            .setMessage("$featureName is available for Premium users only. Upgrade for just Ksh 50/month to unlock PDF/CSV exports, Import Data, and Advanced Analytics.")
-            .setPositiveButton("Upgrade Now") { _, _ ->
+        showActionSheet(
+            title = "Premium feature",
+            message = "$featureName is available for Premium users only. Upgrade for Ksh 50/month to unlock PDF/CSV exports, imports, and advanced analytics.",
+            primary = "Upgrade now",
+            secondary = "Maybe later",
+            onPrimary = {
                 showPremiumPurchaseDialog()
             }
-            .setNegativeButton("Maybe Later", null)
-            .show()
+        )
     }
 
     private fun launchExportIntent(mimeType: String, fileName: String) {
@@ -161,11 +160,8 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showDateRangeDialog(onRangeSelected: (String) -> Unit) {
-        val options = arrayOf("All Time", "This Month", "Last Month", "This Year", "Custom Range")
-
-        AlertDialog.Builder(requireContext())
-            .setTitle("Select Report Period")
-            .setItems(options) { _, which ->
+        val options = listOf("All Time", "This Month", "Last Month", "This Year", "Custom Range")
+        showOptionPicker("Select report period", options) { which ->
                 val calendar = Calendar.getInstance()
                 val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
 
@@ -230,48 +226,28 @@ class SettingsFragment : Fragment() {
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
     }
 
     private fun showCustomDatePicker(onRangeSelected: () -> Unit) {
-        val calendar = Calendar.getInstance()
+        val picker = MaterialDatePicker.Builder.dateRangePicker()
+            .setTitleText("Select custom report range")
+            .build()
 
-        android.app.DatePickerDialog(
-            requireContext(),
-            { _, year, month, day ->
-                val startCal = Calendar.getInstance()
-                startCal.set(year, month, day, 0, 0, 0)
-                exportStartDate = startCal.timeInMillis
+        picker.addOnPositiveButtonClickListener { selection ->
+            val start = selection.first
+            val end = selection.second
 
-                android.app.DatePickerDialog(
-                    requireContext(),
-                    { _, endYear, endMonth, endDay ->
-                        val endCal = Calendar.getInstance()
-                        endCal.set(endYear, endMonth, endDay, 23, 59, 59)
-                        exportEndDate = endCal.timeInMillis
+            if (start == null || end == null || end < start) {
+                Toast.makeText(context, "Select a valid date range", Toast.LENGTH_SHORT).show()
+                return@addOnPositiveButtonClickListener
+            }
 
-                        if ((exportEndDate ?: 0L) < (exportStartDate ?: 0L)) {
-                            Toast.makeText(context, "End date cannot be before start date", Toast.LENGTH_SHORT).show()
-                        } else {
-                            onRangeSelected()
-                        }
-                    },
-                    year,
-                    month,
-                    day
-                ).apply {
-                    setTitle("Select End Date")
-                    show()
-                }
-            },
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH)
-        ).apply {
-            setTitle("Select Start Date")
-            show()
+            exportStartDate = start
+            exportEndDate = end
+            onRangeSelected()
         }
+
+        picker.show(parentFragmentManager, "export_date_range_picker")
     }
 
     override fun onCreateView(
@@ -298,10 +274,8 @@ class SettingsFragment : Fragment() {
                 return@setOnClickListener
             }
 
-            val options = arrayOf("PDF Report (Recommended)", "CSV (Excel)")
-            AlertDialog.Builder(requireContext())
-                .setTitle("Export Data")
-                .setItems(options) { _, which ->
+            val options = listOf("PDF Report (Recommended)", "CSV (Excel)")
+            showOptionPicker("Export data", options) { which ->
                     if (which == 0) {
                         showDateRangeDialog { dateLabel ->
                             exportType = "pdf"
@@ -314,7 +288,6 @@ class SettingsFragment : Fragment() {
                         }
                     }
                 }
-                .show()
         }
 
         binding.btnImportData.setOnClickListener {
@@ -522,33 +495,29 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showSetPinDialog() {
-        val inputLayout = LinearLayout(context)
-        inputLayout.orientation = LinearLayout.VERTICAL
-        inputLayout.setPadding(50, 40, 50, 10)
+        val dialog = BottomSheetDialog(requireContext())
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_pin, null)
+        val layoutPin = view.findViewById<TextInputLayout>(R.id.layout_pin)
+        val pinInput = view.findViewById<TextInputEditText>(R.id.edit_pin)
+        val saveButton = view.findViewById<MaterialButton>(R.id.btn_pin_save)
+        val cancelButton = view.findViewById<MaterialButton>(R.id.btn_pin_cancel)
 
-        val pinInput = android.widget.EditText(context)
-        pinInput.hint = "Enter 4-digit PIN"
-        pinInput.inputType =
-            android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
-        pinInput.filters = arrayOf(android.text.InputFilter.LengthFilter(4))
-        inputLayout.addView(pinInput)
-
-        AlertDialog.Builder(requireContext())
-            .setTitle("Set App Lock PIN")
-            .setView(inputLayout)
-            .setPositiveButton("Save") { _, _ ->
-                val pin = pinInput.text.toString()
-                if (pin.length == 4) {
-                    SecurityUtils.setPin(requireContext(), pin)
-                    SecurityUtils.setBiometricEnabled(requireContext(), true)
-                    binding.switchBiometric.isChecked = true
-                    Toast.makeText(context, "PIN Set & Lock Enabled", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context, "PIN must be 4 digits", Toast.LENGTH_SHORT).show()
-                }
+        cancelButton.setOnClickListener { dialog.dismiss() }
+        saveButton.setOnClickListener {
+            val pin = pinInput.text?.toString().orEmpty()
+            if (pin.length == 4) {
+                SecurityUtils.setPin(requireContext(), pin)
+                SecurityUtils.setBiometricEnabled(requireContext(), true)
+                binding.switchBiometric.isChecked = true
+                Toast.makeText(context, "PIN set and app lock enabled", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            } else {
+                layoutPin.error = "PIN must be 4 digits"
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
+
+        dialog.setContentView(view)
+        dialog.show()
     }
 
     private fun showManageCategoriesDialog() {
@@ -557,6 +526,7 @@ class SettingsFragment : Fragment() {
         val view = layoutInflater.inflate(R.layout.bottom_sheet_manage_categories, null)
         val listContainer = view.findViewById<LinearLayout>(R.id.category_list_container)
         val addButton = view.findViewById<MaterialButton>(R.id.btn_add_category)
+        val addTopButton = view.findViewById<MaterialButton>(R.id.btn_add_category_top)
 
         categories.forEach { category ->
             listContainer.addView(
@@ -567,10 +537,12 @@ class SettingsFragment : Fragment() {
             )
         }
 
-        addButton.setOnClickListener {
+        val showAddSheet = {
             dialog.dismiss()
             showAddCategoryDialog()
         }
+        addButton.setOnClickListener { showAddSheet() }
+        addTopButton.setOnClickListener { showAddSheet() }
 
         dialog.setContentView(view)
         dialog.show()
@@ -851,12 +823,77 @@ class SettingsFragment : Fragment() {
         message: String,
         onConfirm: () -> Unit
     ) {
-        AlertDialog.Builder(requireContext())
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton("Yes") { _, _ -> onConfirm() }
-            .setNegativeButton("No", null)
-            .show()
+        showActionSheet(
+            title = title,
+            message = message,
+            primary = "Confirm",
+            secondary = "Cancel",
+            onPrimary = onConfirm
+        )
+    }
+
+    private fun showActionSheet(
+        title: String,
+        message: String,
+        primary: String,
+        secondary: String,
+        onPrimary: () -> Unit
+    ) {
+        val dialog = BottomSheetDialog(requireContext())
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_action_prompt, null)
+        view.findViewById<TextView>(R.id.text_prompt_title).text = title
+        view.findViewById<TextView>(R.id.text_prompt_message).text = message
+        view.findViewById<MaterialButton>(R.id.btn_prompt_primary).apply {
+            text = primary
+            setOnClickListener {
+                dialog.dismiss()
+                onPrimary()
+            }
+        }
+        view.findViewById<MaterialButton>(R.id.btn_prompt_secondary).apply {
+            text = secondary
+            setOnClickListener { dialog.dismiss() }
+        }
+        dialog.setContentView(view)
+        dialog.show()
+    }
+
+    private fun showOptionPicker(
+        title: String,
+        options: List<String>,
+        onSelected: (Int) -> Unit
+    ) {
+        val dialog = BottomSheetDialog(requireContext())
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_list_picker, null)
+        val container = view.findViewById<LinearLayout>(R.id.list_picker_container)
+        view.findViewById<TextView>(R.id.text_picker_title).text = title
+
+        options.forEachIndexed { index, label ->
+            val row = TextView(requireContext()).apply {
+                text = label
+                textSize = 15f
+                setTextColor(requireContext().getColor(R.color.text_primary))
+                typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                minHeight = dp(50)
+                setPadding(dp(14), 0, dp(14), 0)
+                background = requireContext().getDrawable(R.drawable.bg_card_white)
+                setOnClickListener {
+                    dialog.dismiss()
+                    onSelected(index)
+                }
+            }
+            container.addView(row)
+            row.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(8)
+            }
+        }
+
+        dialog.setContentView(view)
+        dialog.show()
     }
 
     override fun onDestroyView() {

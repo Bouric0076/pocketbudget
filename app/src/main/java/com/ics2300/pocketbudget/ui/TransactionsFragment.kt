@@ -6,11 +6,12 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.chip.Chip
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.ics2300.pocketbudget.MainApplication
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.TransactionEntity
@@ -37,6 +38,7 @@ class TransactionsFragment : Fragment() {
     private val viewModel: TransactionsViewModel by viewModels()
 
     private val budgetViewModel: BudgetViewModel by viewModels()
+    private var pendingCategoryTransactionId: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -55,6 +57,7 @@ class TransactionsFragment : Fragment() {
             transactions?.let { 
                 val groupedList = TransactionGrouper.groupTransactions(it)
                 adapter.submitList(groupedList) 
+                handlePendingNotificationAction(it.map { item -> item.transaction })
                 
                 if (it.isEmpty()) {
                     binding.recyclerviewTransactions.visibility = View.GONE
@@ -81,11 +84,37 @@ class TransactionsFragment : Fragment() {
         setupChips()
         setupDateFilter()
         setupAdvancedFilter()
+        setupSort()
 
         // Observe Categories from budgetViewModel to ensure they are loaded for details view
         budgetViewModel.categories.observe(viewLifecycleOwner) { /* Ensure LiveData is active */ }
+        observeNotificationNavigation()
 
         return root
+    }
+
+    private fun observeNotificationNavigation() {
+        findNavController().currentBackStackEntry
+            ?.savedStateHandle
+            ?.getLiveData<String>("open_transaction_category_id")
+            ?.observe(viewLifecycleOwner) { transactionId ->
+                pendingCategoryTransactionId = transactionId
+                val currentTransactions = viewModel.transactionsWithCategory.value
+                    ?.map { it.transaction }
+                    .orEmpty()
+                handlePendingNotificationAction(currentTransactions)
+            }
+    }
+
+    private fun handlePendingNotificationAction(transactions: List<TransactionEntity>) {
+        val transactionId = pendingCategoryTransactionId ?: return
+        val transaction = transactions.firstOrNull { it.transactionId == transactionId } ?: return
+
+        pendingCategoryTransactionId = null
+        findNavController().currentBackStackEntry
+            ?.savedStateHandle
+            ?.remove<String>("open_transaction_category_id")
+        showCategorySelectionDialog(transaction)
     }
 
     private fun setupAdvancedFilter() {
@@ -197,20 +226,55 @@ class TransactionsFragment : Fragment() {
 
     private fun setupSort() {
         binding.btnSort.setOnClickListener {
-            val sortTypes = arrayOf("Date (Newest First)", "Date (Oldest First)", "Amount (High to Low)", "Amount (Low to High)")
-            AlertDialog.Builder(requireContext())
-                .setTitle("Sort By")
-                .setItems(sortTypes) { _, which ->
-                    val sortType = when (which) {
-                        0 -> SortType.DATE_DESC
-                        1 -> SortType.DATE_ASC
-                        2 -> SortType.AMOUNT_DESC
-                        3 -> SortType.AMOUNT_ASC
-                        else -> SortType.DATE_DESC
+            val sortTypes = listOf(
+                "Date (Newest First)",
+                "Date (Oldest First)",
+                "Amount (High to Low)",
+                "Amount (Low to High)"
+            )
+            val dialog = BottomSheetDialog(requireContext())
+            val view = layoutInflater.inflate(R.layout.bottom_sheet_list_picker, null)
+            view.findViewById<android.widget.TextView>(R.id.text_picker_title).text = "Sort transactions"
+            val container = view.findViewById<android.widget.LinearLayout>(R.id.list_picker_container)
+
+            sortTypes.forEachIndexed { index, label ->
+                val row = android.widget.TextView(requireContext()).apply {
+                    text = label
+                    textSize = 15f
+                    setTextColor(requireContext().getColor(R.color.text_primary))
+                    typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    minHeight = (50 * resources.displayMetrics.density).toInt()
+                    setPadding(
+                        (14 * resources.displayMetrics.density).toInt(),
+                        0,
+                        (14 * resources.displayMetrics.density).toInt(),
+                        0
+                    )
+                    background = requireContext().getDrawable(R.drawable.bg_card_white)
+                    setOnClickListener {
+                        val sortType = when (index) {
+                            0 -> SortType.DATE_DESC
+                            1 -> SortType.DATE_ASC
+                            2 -> SortType.AMOUNT_DESC
+                            3 -> SortType.AMOUNT_ASC
+                            else -> SortType.DATE_DESC
+                        }
+                        viewModel.setSortType(sortType)
+                        dialog.dismiss()
                     }
-                    viewModel.setSortType(sortType)
                 }
-                .show()
+                container.addView(row)
+                row.layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = (8 * resources.displayMetrics.density).toInt()
+                }
+            }
+
+            dialog.setContentView(view)
+            dialog.show()
         }
     }
 
