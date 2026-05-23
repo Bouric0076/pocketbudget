@@ -7,8 +7,10 @@
     android:background="@color/surface_page">
 
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/dashboardScrollView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:clipToPadding="false"
         android:overScrollMode="never">
 
         <LinearLayout
@@ -383,7 +385,7 @@
             </LinearLayout>
 
             <!-- Bottom padding for nav bar -->
-            <View android:layout_width="match_parent" android:layout_height="20dp"/>
+            <View android:layout_width="match_parent" android:layout_height="24dp"/>
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

@@ -16,6 +16,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.ics2300.pocketbudget.MainApplication
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.TransactionEntity
@@ -73,6 +74,8 @@ class DashboardFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        adjustDashboardBottomInset()
         
         // Update Privacy Eye State
         updatePrivacyEyeState()
@@ -421,6 +424,23 @@ class DashboardFragment : Fragment() {
                 startActivity(intent)
             }
         )
+    }
+
+    private fun adjustDashboardBottomInset() {
+        val bottomNavigationView = requireActivity().findViewById<BottomNavigationView>(R.id.bottom_navigation)
+        val currentBottomPadding = binding.dashboardScrollView.paddingBottom
+
+        bottomNavigationView.post {
+            val bottomMargin = (bottomNavigationView.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
+            val extraSpacing = (resources.displayMetrics.density * 16).toInt()
+
+            binding.dashboardScrollView.setPadding(
+                binding.dashboardScrollView.paddingLeft,
+                binding.dashboardScrollView.paddingTop,
+                binding.dashboardScrollView.paddingRight,
+                currentBottomPadding + bottomNavigationView.height + bottomMargin + extraSpacing
+            )
+        }
     }
 
     private fun showActionSheet(
