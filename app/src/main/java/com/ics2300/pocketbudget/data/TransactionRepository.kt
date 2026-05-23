@@ -13,6 +13,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.Calendar
+import java.util.Locale
 import kotlin.math.abs
 
 class TransactionRepository(
@@ -149,7 +150,7 @@ class TransactionRepository(
                 ?: return@withContext
 
             val normalizedParty =
-                transaction.partyName.trim().uppercase()
+                normalizePartyName(transaction.partyName)
 
             transactionDao.updateCategoryAndLearnActor(
                 transactionId = transactionId,
@@ -165,7 +166,7 @@ class TransactionRepository(
     ) {
         withContext(Dispatchers.IO) {
 
-            val normalizedParty = partyName.trim().uppercase()
+            val normalizedParty = normalizePartyName(partyName)
 
             if (normalizedParty.isBlank()) {
                 return@withContext
@@ -245,29 +246,69 @@ class TransactionRepository(
     }
 
     suspend fun getAllCategoriesList(): List<CategoryEntity> {
-        return transactionDao.getAllCategoriesList()
+        return withContext(Dispatchers.IO) {
+            ensureDefaultCategoriesExist()
+        }
     }
 
-    suspend fun addCategory(category: CategoryEntity) {
-        transactionDao.insertCategory(category)
-        cachedCategories = null
+    suspend fun addCategory(category: CategoryEntity): Int {
+        return withContext(Dispatchers.IO) {
+            val normalizedCategory =
+                category.copy(keywords = normalizeKeywords(category.keywords))
+
+            val newCategoryId =
+                transactionDao.insertCategory(normalizedCategory)
+
+            cachedCategories = null
+
+            if (newCategoryId != -1L) {
+                recategorizeUncategorizedTransactions()
+            } else {
+                0
+            }
+        }
     }
 
-    suspend fun updateCategory(category: CategoryEntity) {
-        transactionDao.updateCategory(
-            category.id,
-            category.name,
-            category.keywords,
-            category.iconName,
-            category.colorHex
-        )
+    suspend fun updateCategory(category: CategoryEntity): Int {
+        return withContext(Dispatchers.IO) {
+            transactionDao.updateCategory(
+                category.id,
+                category.name.trim(),
+                normalizeKeywords(category.keywords),
+                category.iconName,
+                category.colorHex
+            )
 
-        cachedCategories = null
+            cachedCategories = null
+            recategorizeUncategorizedTransactions()
+        }
     }
 
     suspend fun deleteCategory(categoryId: Int) {
-        transactionDao.deleteCategory(categoryId)
-        cachedCategories = null
+        withContext(Dispatchers.IO) {
+            val categories = ensureDefaultCategoriesExist()
+            val uncategorizedCategory =
+                categories.firstOrNull {
+                    it.name.equals("Uncategorized", true)
+                } ?: return@withContext
+
+            if (categoryId == uncategorizedCategory.id) {
+                return@withContext
+            }
+
+            transactionDao.reassignTransactionsCategory(
+                oldCategoryId = categoryId,
+                newCategoryId = uncategorizedCategory.id
+            )
+            transactionDao.reassignRecurringTransactionsCategory(
+                oldCategoryId = categoryId,
+                newCategoryId = uncategorizedCategory.id
+            )
+            transactionDao.deleteBudgetsForCategory(categoryId)
+            transactionDao.deleteActorMappingsForCategory(categoryId)
+            transactionDao.deleteCategory(categoryId)
+            cachedCategories = null
+        }
     }
 
     suspend fun clearAllData() {
@@ -280,7 +321,11 @@ class TransactionRepository(
         if (transactionDao.getCategoryCount() == 0) {
 
             for (category in CategoryUtils.getDefaultCategories()) {
-                transactionDao.insertCategory(category)
+                transactionDao.insertCategory(
+                    category.copy(
+                        keywords = normalizeKeywords(category.keywords)
+                    )
+                )
             }
 
             cachedCategories = null
@@ -365,13 +410,15 @@ class TransactionRepository(
         var matchedCategoryId: Int? = null
 
         val party =
-            transaction.partyName.trim().uppercase()
+            normalizePartyName(transaction.partyName)
 
         val account =
-            transaction.accountName
-                ?.trim()
-                ?.uppercase()
-                .orEmpty()
+            normalizePartyName(transaction.accountName.orEmpty())
+
+        val searchableText =
+            listOf(party, account)
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
 
         if (party.isNotBlank()) {
             matchedCategoryId =
@@ -386,11 +433,11 @@ class TransactionRepository(
 
                 for (keyword in keywords) {
 
-                    val kw = keyword.trim().uppercase()
+                    val kw = normalizeKeyword(keyword)
 
                     if (
                         kw.isNotBlank() &&
-                        (party.contains(kw) || account.contains(kw))
+                        keywordMatches(searchableText, kw)
                     ) {
                         matchedCategoryId = category.id
                         break
@@ -445,7 +492,7 @@ class TransactionRepository(
     ): Int? {
 
         val party =
-            transaction.partyName.trim().uppercase()
+            normalizePartyName(transaction.partyName)
 
         if (party.isBlank()) {
             return null
@@ -483,10 +530,85 @@ class TransactionRepository(
             return null
         }
 
+        val uncategorizedCategoryId =
+            transactionDao.getAllCategoriesList()
+                .firstOrNull {
+                    it.name.equals("Uncategorized", true)
+                }
+                ?.id
+
         return previousTransactions
-            .groupBy { it.categoryId }
+            .mapNotNull { it.categoryId }
+            .filter { it != uncategorizedCategoryId }
+            .groupBy { it }
             .maxByOrNull { it.value.size }
             ?.key
+    }
+
+    private suspend fun recategorizeUncategorizedTransactions(): Int {
+        val categories = ensureDefaultCategoriesExist()
+        val uncategorizedCategory =
+            categories.firstOrNull {
+                it.name.equals("Uncategorized", true)
+            } ?: return 0
+
+        val candidates =
+            transactionDao.getUncategorizedTransactions(uncategorizedCategory.id)
+
+        var updatedCount = 0
+
+        for (transaction in candidates) {
+            val categorized =
+                categorizeTransaction(
+                    transaction.copy(categoryId = null),
+                    categories
+                )
+
+            val newCategoryId =
+                categorized.categoryId ?: continue
+
+            if (newCategoryId != transaction.categoryId) {
+                transactionDao.updateTransactionCategory(
+                    transaction.id,
+                    newCategoryId
+                )
+                updatedCount++
+            }
+        }
+
+        return updatedCount
+    }
+
+    private fun normalizePartyName(value: String): String {
+        return value
+            .trim()
+            .uppercase(Locale.US)
+    }
+
+    private fun normalizeKeywords(value: String): String {
+        return value
+            .split(",")
+            .map { normalizeKeyword(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString(",")
+    }
+
+    private fun normalizeKeyword(value: String): String {
+        return normalizePartyName(value)
+    }
+
+    private fun keywordMatches(text: String, keyword: String): Boolean {
+        if (text.isBlank() || keyword.isBlank()) {
+            return false
+        }
+
+        if (keyword.length > 3) {
+            return text.contains(keyword)
+        }
+
+        return Regex("(^|[^A-Z0-9])${Regex.escape(keyword)}([^A-Z0-9]|$)")
+            .containsMatchIn(text)
     }
 
     suspend fun importData(

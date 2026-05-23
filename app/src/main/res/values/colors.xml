@@ -53,6 +53,7 @@
     <color name="teal_700">#018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="white_35">#59FFFFFF</color>
     <color name="brand_accent_orange">#FF9800</color>
     <color name="onboarding_hero_green">#1B6B4A</color>
     <color name="onboarding_chip_green">#E8F5EE</color>
@@ -66,4 +67,15 @@
     <!-- Add missing colors referenced by onboarding layouts -->
     <color name="background_primary">#FFFFFFFF</color>
     <color name="text_tertiary">#AAAAAA</color>
+    <color name="surface_page">#F7F8F7</color>
+    <color name="avatar_bg_green">#E8F5EE</color>
+    <color name="avatar_text_green">#0A3D2E</color>
+    <color name="avatar_bg_indigo">#EEEDFE</color>
+    <color name="avatar_text_indigo">#534AB7</color>
+    <color name="avatar_bg_amber">#FAEEDA</color>
+    <color name="avatar_text_amber">#BA7517</color>
+    <color name="avatar_bg_red">#FCEAEA</color>
+    <color name="avatar_text_red">#C0392B</color>
+    <color name="avatar_bg_gray">#EFEFEF</color>
+    <color name="avatar_text_gray">#757575</color>
 </resources>

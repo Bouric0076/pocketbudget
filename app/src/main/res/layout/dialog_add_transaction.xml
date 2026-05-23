@@ -1,214 +1,257 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_bottom_sheet_white"
-    android:paddingBottom="24dp">
+    android:orientation="vertical"
+    android:background="@drawable/bg_bottom_sheet">
 
-    <!-- Drag Handle -->
+    <!-- Drag handle -->
     <View
-        android:id="@+id/drag_handle"
-        android:layout_width="48dp"
+        android:layout_width="36dp"
         android:layout_height="4dp"
-        android:background="#E0E0E0"
+        android:layout_gravity="center_horizontal"
         android:layout_marginTop="12dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        android:background="@drawable/bg_drag_handle"/>
 
-    <TextView
-        android:id="@+id/title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="New Transaction"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:textColor="@color/text_primary"
-        android:layout_marginTop="24dp"
-        app:layout_constraintTop_toBottomOf="@id/drag_handle"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
-
-    <!-- Toggle Group -->
-    <com.google.android.material.button.MaterialButtonToggleGroup
-        android:id="@+id/toggle_type"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="24dp"
-        app:singleSelection="true"
-        app:selectionRequired="true"
-        app:checkedButton="@id/btn_expense"
-        app:layout_constraintTop_toBottomOf="@id/title"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <Button
-            android:id="@+id/btn_expense"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Expense"
-            android:textColor="@color/text_primary"/>
-
-        <Button
-            android:id="@+id/btn_income"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Income"
-            android:textColor="@color/text_primary"/>
-    </com.google.android.material.button.MaterialButtonToggleGroup>
-
-    <!-- Amount Input (Large) -->
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/layout_amount"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:layout_marginHorizontal="24dp"
-        android:hint="Amount"
-        app:startIconDrawable="@drawable/ic_money" 
-        app:startIconTint="@color/brand_dark_green"
-        app:boxStrokeColor="@color/brand_dark_green"
-        app:hintTextColor="@color/brand_dark_green"
-        app:layout_constraintTop_toBottomOf="@id/toggle_type"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/edit_amount"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="numberDecimal"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_primary"
-            android:gravity="center_horizontal"/>
-    </com.google.android.material.textfield.TextInputLayout>
-
-    <!-- Recurring Toggle -->
+    <!-- Header -->
     <LinearLayout
-        android:id="@+id/layout_recurring"
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginTop="16dp"
-        android:layout_marginHorizontal="24dp"
-        app:layout_constraintTop_toBottomOf="@id/layout_amount"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-        
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="14dp">
+
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Recurring Payment?"
+            android:text="Add Transaction"
             android:textSize="16sp"
+            android:fontFamily="sans-serif-medium"
             android:textColor="@color/text_primary"/>
-        
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/switch_recurring"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+
+        <ImageButton
+            android:id="@+id/btnClose"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="@drawable/bg_close_btn"
+            android:src="@drawable/ic_close"
+            android:contentDescription="Close"/>
     </LinearLayout>
 
-    <!-- Frequency Dropdown (Hidden by default) -->
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/layout_frequency"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:layout_marginHorizontal="24dp"
-        android:hint="Frequency"
-        android:visibility="gone"
-        app:boxStrokeColor="@color/brand_dark_green"
-        app:hintTextColor="@color/brand_dark_green"
-        app:layout_constraintTop_toBottomOf="@id/layout_recurring"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+    <View android:layout_width="match_parent" android:layout_height="0.5dp"
+        android:background="#F0F0F0"/>
 
-        <AutoCompleteTextView
-            android:id="@+id/edit_frequency"
+    <!-- Scrollable body -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:overScrollMode="never">
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="none"
-            android:text="Monthly"
-            android:textColor="@color/text_primary"/>
-    </com.google.android.material.textfield.TextInputLayout>
+            android:orientation="vertical"
+            android:padding="20dp">
 
-    <!-- Category -->
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/layout_category"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:layout_marginHorizontal="24dp"
-        android:hint="Category"
-        app:startIconDrawable="@drawable/ic_category"
-        app:startIconTint="@color/brand_dark_green"
-        app:boxStrokeColor="@color/brand_dark_green"
-        app:hintTextColor="@color/brand_dark_green"
-        app:layout_constraintTop_toBottomOf="@id/layout_frequency"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+            <!-- toggleType: Income / Expense -->
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/toggleType"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="20dp"
+                app:singleSelection="true"
+                app:selectionRequired="true"
+                android:background="@drawable/bg_toggle_track">
 
-        <AutoCompleteTextView
-            android:id="@+id/edit_category"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="none"
-            android:text="Uncategorized"
-            android:textColor="@color/text_primary"/>
-    </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_income"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:text="Income"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium"
+                    style="@style/Widget.App.ToggleButton"/>
 
-    <!-- Note -->
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/layout_note"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:layout_marginHorizontal="24dp"
-        android:hint="Note (Optional)"
-        app:startIconDrawable="@drawable/ic_note"
-        app:startIconTint="@color/brand_dark_green"
-        app:boxStrokeColor="@color/brand_dark_green"
-        app:hintTextColor="@color/brand_dark_green"
-        app:layout_constraintTop_toBottomOf="@id/layout_category"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_expense"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:text="Expense"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium"
+                    style="@style/Widget.App.ToggleButton"/>
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/edit_note"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="textCapSentences"
-            android:textColor="@color/text_primary"/>
-    </com.google.android.material.textfield.TextInputLayout>
+            </com.google.android.material.button.MaterialButtonToggleGroup>
 
-    <Button
-        android:id="@+id/btn_save_transaction"
-        android:layout_width="0dp"
-        android:layout_height="56dp"
-        android:layout_marginTop="32dp"
-        android:layout_marginHorizontal="24dp"
-        android:text="Save Transaction"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:backgroundTint="@color/brand_dark_green"
-        android:textColor="@color/white"
-        app:cornerRadius="28dp"
-        app:layout_constraintTop_toBottomOf="@id/layout_note"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"/>
+            <!-- Amount focal zone — editAmount / layoutAmount -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layoutAmount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:hint="Amount"
+                style="@style/Widget.App.AmountInput"
+                app:prefixText="KES "
+                app:prefixTextColor="@color/text_secondary">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editAmount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="numberDecimal"
+                    android:textSize="28sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textColor="@color/text_primary"/>
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Description — editNote / layoutNote -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layoutNote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:hint="Description (e.g. Naivas Supermarket)"
+                style="@style/Widget.App.RoundedInput"
+                app:startIconDrawable="@drawable/ic_pencil"
+                app:startIconTint="@color/text_tertiary">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editNote"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textCapWords"
+                    android:textSize="14sp"
+                    android:fontFamily="sans-serif"/>
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Category quick chips -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CATEGORY"
+                android:textSize="10sp"
+                android:fontFamily="sans-serif-medium"
+                android:textColor="@color/text_tertiary"
+                android:letterSpacing="0.05"
+                android:layout_marginBottom="8dp"/>
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chipGroupCategories"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                app:singleSelection="true"
+                app:selectionRequired="false"/>
+
+            <!-- editCategory / layoutCategory — full dropdown -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layoutCategory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:hint="Or search all categories"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                app:startIconDrawable="@drawable/ic_tag"
+                app:startIconTint="@color/text_tertiary"
+                app:boxCornerRadiusTopStart="11dp"
+                app:boxCornerRadiusTopEnd="11dp"
+                app:boxCornerRadiusBottomStart="11dp"
+                app:boxCornerRadiusBottomEnd="11dp">
+
+                <AutoCompleteTextView
+                    android:id="@+id/editCategory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif"/>
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- switchRecurring + label -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_recurring_row"
+                android:padding="13dp"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Recurring transaction"
+                        android:textSize="13sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:textColor="@color/text_primary"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Repeat automatically on a schedule"
+                        android:textSize="10sp"
+                        android:textColor="@color/text_tertiary"
+                        android:layout_marginTop="2dp"/>
+                </LinearLayout>
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchRecurring"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    app:thumbTint="@color/switch_thumb_selector"
+                    app:trackTint="@color/switch_track_selector"/>
+            </LinearLayout>
+
+            <!-- layoutFrequency — GONE by default, shown when switchRecurring on -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layoutFrequency"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:hint="Frequency"
+                android:visibility="gone"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                app:startIconDrawable="@drawable/ic_repeat"
+                app:startIconTint="@color/text_tertiary"
+                app:boxCornerRadiusTopStart="11dp"
+                app:boxCornerRadiusTopEnd="11dp"
+                app:boxCornerRadiusBottomStart="11dp"
+                app:boxCornerRadiusBottomEnd="11dp">
+
+                <AutoCompleteTextView
+                    android:id="@+id/editFrequency"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none"
+                    android:textSize="13sp"/>
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- btnSaveTransaction -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSaveTransaction"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="Save Transaction"
+                android:textSize="14sp"
+                android:fontFamily="sans-serif-medium"
+                app:cornerRadius="14dp"
+                app:backgroundTint="@color/brand_dark_green"
+                app:elevation="0dp"/>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

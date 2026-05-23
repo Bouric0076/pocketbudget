@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 object NotificationHelper {
 
     private const val TAG = "NotificationHelper"
+    private const val PREF_NAME = "notification_settings"
+    private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
 
     const val CHANNEL_TRANSACTIONS = "transaction_alerts"
     const val CHANNEL_DAILY_SUMMARY = "daily_summary"
@@ -93,6 +95,20 @@ object NotificationHelper {
             ) == PackageManager.PERMISSION_GRANTED
     }
 
+    fun areNotificationsEnabled(context: Context): Boolean {
+        return context.applicationContext
+            .getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
+    }
+
+    fun setNotificationsEnabled(context: Context, enabled: Boolean) {
+        context.applicationContext
+            .getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_NOTIFICATIONS_ENABLED, enabled)
+            .apply()
+    }
+
     private fun showNotification(
         context: Context,
         channelId: String,
@@ -119,6 +135,11 @@ object NotificationHelper {
         val app = context.applicationContext as? MainApplication
         if (app == null) {
             Log.e(TAG, "Application context is not MainApplication.")
+            return
+        }
+
+        if (!areNotificationsEnabled(context)) {
+            Log.i(TAG, "Notifications are disabled by user preference. Notification skipped.")
             return
         }
 
@@ -221,7 +242,7 @@ object NotificationHelper {
         channelId: String,
         groupId: String
     ) {
-        if (!hasNotificationPermission(context)) return
+        if (!areNotificationsEnabled(context) || !hasNotificationPermission(context)) return
 
         try {
             val summaryNotification = NotificationCompat.Builder(context, channelId)

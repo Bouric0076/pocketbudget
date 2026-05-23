@@ -2,7 +2,9 @@ package com.ics2300.pocketbudget.ui
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -14,20 +16,29 @@ import android.view.ViewGroup
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.core.view.setPadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.textfield.TextInputEditText
 import com.ics2300.pocketbudget.MainApplication
 import com.ics2300.pocketbudget.R
+import com.ics2300.pocketbudget.data.CategoryEntity
 import com.ics2300.pocketbudget.databinding.FragmentSettingsBinding
 import com.ics2300.pocketbudget.ui.dashboard.SyncResult
 import com.ics2300.pocketbudget.ui.settings.SettingsViewModel
+import com.ics2300.pocketbudget.ui.settings.SettingsViewModel.CategoryAction
+import com.ics2300.pocketbudget.ui.settings.SettingsViewModel.CategoryActionResult
 import com.ics2300.pocketbudget.ui.settings.SettingsViewModelFactory
 import com.ics2300.pocketbudget.utils.AutoStartHelper
 import com.ics2300.pocketbudget.utils.CategoryUtils
+import com.ics2300.pocketbudget.utils.NotificationHelper
 import com.ics2300.pocketbudget.utils.PremiumManager
 import com.ics2300.pocketbudget.utils.SecurityUtils
 import java.util.Calendar
@@ -44,6 +55,22 @@ class SettingsFragment : Fragment() {
     private var exportType = "pdf"
     private var exportStartDate: Long? = null
     private var exportEndDate: Long? = null
+    private var suppressNotificationSwitchCallback = false
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            NotificationHelper.setNotificationsEnabled(requireContext(), granted)
+            suppressNotificationSwitchCallback = true
+            binding.switchNotifications.isChecked = granted
+            suppressNotificationSwitchCallback = false
+
+            val message = if (granted) {
+                "Notifications enabled"
+            } else {
+                "Notification permission denied"
+            }
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
 
     private val createDocumentLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -337,10 +364,7 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        binding.switchNotifications.setOnCheckedChangeListener { _, isChecked ->
-            val message = if (isChecked) "Notifications enabled" else "Notifications disabled"
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-        }
+        setupNotificationSettings()
 
         setupSecuritySettings()
 
@@ -372,9 +396,62 @@ class SettingsFragment : Fragment() {
 
         viewModel.categories.observe(viewLifecycleOwner) { }
 
+        viewModel.categoryActionStatus.observe(viewLifecycleOwner) { result ->
+            when (result) {
+                is CategoryActionResult.Idle -> Unit
+
+                is CategoryActionResult.Success -> {
+                    Toast.makeText(
+                        context,
+                        buildCategoryActionMessage(result),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    viewModel.clearCategoryActionStatus()
+                }
+
+                is CategoryActionResult.Error -> {
+                    Toast.makeText(
+                        context,
+                        result.message,
+                        Toast.LENGTH_LONG
+                    ).show()
+                    viewModel.clearCategoryActionStatus()
+                }
+            }
+        }
+
         binding.textViewVersionNumber.text = getAppVersionName()
 
         return root
+    }
+
+    private fun setupNotificationSettings() {
+        binding.switchNotifications.isChecked = NotificationHelper.areNotificationsEnabled(requireContext())
+
+        binding.switchNotifications.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressNotificationSwitchCallback) return@setOnCheckedChangeListener
+
+            if (isChecked && requiresNotificationPermission()) {
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                return@setOnCheckedChangeListener
+            }
+
+            NotificationHelper.setNotificationsEnabled(requireContext(), isChecked)
+            val message = if (isChecked) "Notifications enabled" else "Notifications disabled"
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+
+        binding.containerNotifications.setOnClickListener {
+            binding.switchNotifications.toggle()
+        }
+    }
+
+    private fun requiresNotificationPermission(): Boolean {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                requireContext(),
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
     }
 
     private fun setupSecuritySettings() {
@@ -418,6 +495,32 @@ class SettingsFragment : Fragment() {
         }
     }
 
+    private fun buildCategoryActionMessage(
+        result: CategoryActionResult.Success
+    ): String {
+        return when (result.action) {
+            CategoryAction.Added -> {
+                if (result.recategorizedCount > 0) {
+                    "Category added. ${result.recategorizedCount} transactions matched."
+                } else {
+                    "Category added. No existing transactions matched."
+                }
+            }
+
+            CategoryAction.Updated -> {
+                if (result.recategorizedCount > 0) {
+                    "Category updated. ${result.recategorizedCount} transactions matched."
+                } else {
+                    "Category updated. No existing transactions matched."
+                }
+            }
+
+            CategoryAction.Deleted -> {
+                "Category deleted. Related transactions moved to Uncategorized."
+            }
+        }
+    }
+
     private fun showSetPinDialog() {
         val inputLayout = LinearLayout(context)
         inputLayout.orientation = LinearLayout.VERTICAL
@@ -450,236 +553,235 @@ class SettingsFragment : Fragment() {
 
     private fun showManageCategoriesDialog() {
         val categories = viewModel.categories.value.orEmpty()
-        val categoryNames = categories.map { it.name }.toTypedArray()
+        val dialog = BottomSheetDialog(requireContext())
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_manage_categories, null)
+        val listContainer = view.findViewById<LinearLayout>(R.id.category_list_container)
+        val addButton = view.findViewById<MaterialButton>(R.id.btn_add_category)
 
-        AlertDialog.Builder(requireContext())
-            .setTitle("Manage Categories")
-            .setItems(categoryNames) { _, which ->
-                val selectedCategory = categories[which]
-                showEditCategoryDialog(selectedCategory)
-            }
-            .setPositiveButton("Add New") { _, _ ->
-                showAddCategoryDialog()
-            }
-            .setNegativeButton("Close", null)
-            .show()
+        categories.forEach { category ->
+            listContainer.addView(
+                createCategoryRow(category) {
+                    dialog.dismiss()
+                    showEditCategoryDialog(category)
+                }
+            )
+        }
+
+        addButton.setOnClickListener {
+            dialog.dismiss()
+            showAddCategoryDialog()
+        }
+
+        dialog.setContentView(view)
+        dialog.show()
     }
 
     private fun showAddCategoryDialog() {
-        val inputLayout = LinearLayout(context)
-        inputLayout.orientation = LinearLayout.VERTICAL
-        inputLayout.setPadding(50, 40, 50, 10)
-
-        val nameInput = android.widget.EditText(context)
-        nameInput.hint = "Category Name (e.g. Pets)"
-        inputLayout.addView(nameInput)
-
-        val keywordsInput = android.widget.EditText(context)
-        keywordsInput.hint = "Keywords (comma separated, e.g. VET,FOOD)"
-        inputLayout.addView(keywordsInput)
-
-        val iconLabel = android.widget.TextView(context)
-        iconLabel.text = "Select Icon:"
-        iconLabel.setPadding(0, 20, 0, 10)
-        inputLayout.addView(iconLabel)
-
-        val iconScroll = HorizontalScrollView(context)
-        val iconContainer = LinearLayout(context)
-        iconContainer.orientation = LinearLayout.HORIZONTAL
-        var selectedIcon = "ic_default"
-
-        CategoryUtils.iconMap.forEach { (name, resId) ->
-            val iconView = ImageView(context)
-            iconView.setImageResource(resId)
-            iconView.layoutParams = LinearLayout.LayoutParams(100, 100).apply { marginEnd = 16 }
-            iconView.setPadding(16)
-            iconView.setColorFilter(requireContext().getColor(R.color.brand_dark_green))
-
-            if (name == selectedIcon) iconView.setBackgroundResource(R.drawable.bg_circle_button)
-
-            iconView.setOnClickListener {
-                selectedIcon = name
-                for (i in 0 until iconContainer.childCount) {
-                    iconContainer.getChildAt(i).background = null
-                }
-                iconView.setBackgroundResource(R.drawable.bg_circle_button)
-            }
-
-            iconContainer.addView(iconView)
-        }
-
-        iconScroll.addView(iconContainer)
-        inputLayout.addView(iconScroll)
-
-        val colorLabel = android.widget.TextView(context)
-        colorLabel.text = "Select Color:"
-        colorLabel.setPadding(0, 20, 0, 10)
-        inputLayout.addView(colorLabel)
-
-        val colorScroll = HorizontalScrollView(context)
-        val colorContainer = LinearLayout(context)
-        colorContainer.orientation = LinearLayout.HORIZONTAL
-        var selectedColor = "#0A3D2E"
-
-        CategoryUtils.availableColors.forEach { colorHex ->
-            val colorView = View(context)
-            colorView.layoutParams = LinearLayout.LayoutParams(80, 80).apply { marginEnd = 16 }
-
-            val drawable = android.graphics.drawable.GradientDrawable()
-            drawable.shape = android.graphics.drawable.GradientDrawable.OVAL
-            drawable.setColor(Color.parseColor(colorHex))
-            drawable.setStroke(2, Color.GRAY)
-            colorView.background = drawable
-
-            colorView.setOnClickListener {
-                selectedColor = colorHex
-                for (i in 0 until colorContainer.childCount) {
-                    colorContainer.getChildAt(i).alpha = 0.5f
-                }
-                colorView.alpha = 1.0f
-            }
-
-            colorView.alpha = if (colorHex == selectedColor) 1.0f else 0.5f
-            colorContainer.addView(colorView)
-        }
-
-        colorScroll.addView(colorContainer)
-        inputLayout.addView(colorScroll)
-
-        AlertDialog.Builder(requireContext())
-            .setTitle("Add Category")
-            .setView(inputLayout)
-            .setPositiveButton("Save") { _, _ ->
-                val name = nameInput.text.toString().trim()
-                val keywords = keywordsInput.text.toString().trim().uppercase()
-
-                if (name.isNotEmpty()) {
-                    viewModel.addCategory(name, keywords, selectedIcon, selectedColor)
-                    Toast.makeText(context, "Category added", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        showCategoryEditorSheet(category = null)
     }
 
-    private fun showEditCategoryDialog(category: com.ics2300.pocketbudget.data.CategoryEntity) {
-        val inputLayout = LinearLayout(context)
-        inputLayout.orientation = LinearLayout.VERTICAL
-        inputLayout.setPadding(50, 40, 50, 10)
+    private fun showEditCategoryDialog(category: CategoryEntity) {
+        showCategoryEditorSheet(category)
+    }
 
-        val nameInput = android.widget.EditText(context)
-        nameInput.setText(category.name)
-        nameInput.hint = "Category Name"
-        inputLayout.addView(nameInput)
+    private fun showCategoryEditorSheet(category: CategoryEntity?) {
+        val isEditing = category != null
+        val dialog = BottomSheetDialog(requireContext())
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_category_editor, null)
+        val title = view.findViewById<TextView>(R.id.text_category_editor_title)
+        val subtitle = view.findViewById<TextView>(R.id.text_category_editor_subtitle)
+        val nameInput = view.findViewById<TextInputEditText>(R.id.input_category_name)
+        val keywordsInput = view.findViewById<TextInputEditText>(R.id.input_category_keywords)
+        val iconContainer = view.findViewById<LinearLayout>(R.id.icon_container)
+        val colorContainer = view.findViewById<LinearLayout>(R.id.color_container)
+        val deleteButton = view.findViewById<MaterialButton>(R.id.btn_delete_category)
+        val cancelButton = view.findViewById<MaterialButton>(R.id.btn_cancel_category)
+        val saveButton = view.findViewById<MaterialButton>(R.id.btn_save_category)
 
-        val keywordsInput = android.widget.EditText(context)
-        keywordsInput.setText(category.keywords)
-        keywordsInput.hint = "Keywords (comma separated)"
-        inputLayout.addView(keywordsInput)
+        title.text = if (isEditing) "Edit ${category?.name}" else "Add category"
+        subtitle.text = if (isEditing) {
+            "Changes apply to future M-Pesa messages and can match existing uncategorized transactions."
+        } else {
+            "Keywords help PocketBudget match existing uncategorized transactions and future M-Pesa messages."
+        }
 
-        val iconLabel = android.widget.TextView(context)
-        iconLabel.text = "Select Icon:"
-        iconLabel.setPadding(0, 20, 0, 10)
-        inputLayout.addView(iconLabel)
+        nameInput.setText(category?.name.orEmpty())
+        keywordsInput.setText(category?.keywords.orEmpty())
+        saveButton.text = if (isEditing) "Update" else "Save"
 
-        val iconScroll = HorizontalScrollView(context)
-        val iconContainer = LinearLayout(context)
-        iconContainer.orientation = LinearLayout.HORIZONTAL
-        var selectedIcon = category.iconName
+        var selectedIcon = category?.iconName ?: "ic_default"
+        var selectedColor = category?.colorHex ?: "#0A3D2E"
 
-        CategoryUtils.iconMap.forEach { (name, resId) ->
-            val iconView = ImageView(context)
-            iconView.setImageResource(resId)
-            iconView.layoutParams = LinearLayout.LayoutParams(100, 100).apply { marginEnd = 16 }
-            iconView.setPadding(16)
-            iconView.setColorFilter(requireContext().getColor(R.color.brand_dark_green))
-
-            if (name == selectedIcon) {
-                iconView.setBackgroundResource(R.drawable.bg_circle_button)
-            } else {
-                iconView.background = null
-            }
-
-            iconView.setOnClickListener {
-                selectedIcon = name
-                for (i in 0 until iconContainer.childCount) {
-                    iconContainer.getChildAt(i).background = null
+        fun refreshIconSelection() {
+            for (index in 0 until iconContainer.childCount) {
+                val child = iconContainer.getChildAt(index)
+                child.background = if (child.tag == selectedIcon) {
+                    selectedCircleBackground()
+                } else {
+                    null
                 }
-                iconView.setBackgroundResource(R.drawable.bg_circle_button)
             }
+        }
 
+        fun refreshColorSelection() {
+            for (index in 0 until colorContainer.childCount) {
+                val child = colorContainer.getChildAt(index)
+                child.alpha = if (child.tag == selectedColor) 1f else 0.45f
+            }
+        }
+
+        CategoryUtils.iconMap.forEach { (iconName, resId) ->
+            val iconView = ImageView(requireContext()).apply {
+                tag = iconName
+                setImageResource(resId)
+                setColorFilter(requireContext().getColor(R.color.brand_dark_green))
+                setPadding(dp(12))
+                layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+                    marginEnd = dp(10)
+                }
+                setOnClickListener {
+                    selectedIcon = iconName
+                    refreshIconSelection()
+                }
+            }
             iconContainer.addView(iconView)
         }
 
-        iconScroll.addView(iconContainer)
-        inputLayout.addView(iconScroll)
-
-        val colorLabel = android.widget.TextView(context)
-        colorLabel.text = "Select Color:"
-        colorLabel.setPadding(0, 20, 0, 10)
-        inputLayout.addView(colorLabel)
-
-        val colorScroll = HorizontalScrollView(context)
-        val colorContainer = LinearLayout(context)
-        colorContainer.orientation = LinearLayout.HORIZONTAL
-        var selectedColor = category.colorHex
-
         CategoryUtils.availableColors.forEach { colorHex ->
-            val colorView = View(context)
-            colorView.layoutParams = LinearLayout.LayoutParams(80, 80).apply { marginEnd = 16 }
-
-            val drawable = android.graphics.drawable.GradientDrawable()
-            drawable.shape = android.graphics.drawable.GradientDrawable.OVAL
-            drawable.setColor(Color.parseColor(colorHex))
-            drawable.setStroke(2, Color.GRAY)
-            colorView.background = drawable
-
-            colorView.alpha = if (colorHex == selectedColor) 1.0f else 0.5f
-
-            colorView.setOnClickListener {
-                selectedColor = colorHex
-                for (i in 0 until colorContainer.childCount) {
-                    colorContainer.getChildAt(i).alpha = 0.5f
+            val colorView = View(requireContext()).apply {
+                tag = colorHex
+                background = colorCircleBackground(colorHex)
+                layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply {
+                    marginEnd = dp(10)
                 }
-                colorView.alpha = 1.0f
+                setOnClickListener {
+                    selectedColor = colorHex
+                    refreshColorSelection()
+                }
             }
-
             colorContainer.addView(colorView)
         }
 
-        colorScroll.addView(colorContainer)
-        inputLayout.addView(colorScroll)
+        refreshIconSelection()
+        refreshColorSelection()
 
-        AlertDialog.Builder(requireContext())
-            .setTitle("Edit ${category.name}")
-            .setView(inputLayout)
-            .setPositiveButton("Update") { _, _ ->
-                val name = nameInput.text.toString().trim()
-                val keywords = keywordsInput.text.toString().trim().uppercase()
+        deleteButton.visibility = if (isEditing) View.VISIBLE else View.GONE
+        deleteButton.setOnClickListener {
+            val categoryToDelete = category ?: return@setOnClickListener
+            dialog.dismiss()
+            showConfirmationDialog(
+                "Delete Category",
+                "Delete '${categoryToDelete.name}'? Related transactions will move to Uncategorized."
+            ) {
+                viewModel.deleteCategory(categoryToDelete.id)
+            }
+        }
 
-                if (name.isNotEmpty()) {
-                    viewModel.updateCategory(
-                        category.copy(
-                            name = name,
-                            keywords = keywords,
-                            iconName = selectedIcon,
-                            colorHex = selectedColor
-                        )
+        cancelButton.setOnClickListener { dialog.dismiss() }
+        saveButton.setOnClickListener {
+            val name = nameInput.text?.toString()?.trim().orEmpty()
+            val keywords = keywordsInput.text?.toString()?.trim()?.uppercase().orEmpty()
+
+            if (name.isBlank()) {
+                nameInput.error = "Name required"
+                return@setOnClickListener
+            }
+
+            if (category != null) {
+                viewModel.updateCategory(
+                    category.copy(
+                        name = name,
+                        keywords = keywords,
+                        iconName = selectedIcon,
+                        colorHex = selectedColor
                     )
-                    Toast.makeText(context, "Category updated", Toast.LENGTH_SHORT).show()
-                }
+                )
+            } else {
+                viewModel.addCategory(name, keywords, selectedIcon, selectedColor)
             }
-            .setNeutralButton("Delete") { _, _ ->
-                showConfirmationDialog(
-                    "Delete Category",
-                    "Are you sure you want to delete '${category.name}'? Transactions will become uncategorized."
-                ) {
-                    viewModel.deleteCategory(category.id)
-                    Toast.makeText(context, "Category deleted", Toast.LENGTH_SHORT).show()
-                }
+
+            dialog.dismiss()
+        }
+
+        dialog.setContentView(view)
+        dialog.show()
+    }
+
+    private fun createCategoryRow(
+        category: CategoryEntity,
+        onClick: () -> Unit
+    ): View {
+        val row = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(10), dp(8), dp(10))
+            background = requireContext().getDrawable(R.drawable.bg_card_white)
+            setOnClickListener { onClick() }
+        }
+
+        val icon = ImageView(requireContext()).apply {
+            setImageResource(CategoryUtils.getIconResId(category.iconName))
+            setColorFilter(CategoryUtils.getColor(category.colorHex))
+            setPadding(dp(10))
+            background = selectedCircleBackground()
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+        }
+
+        val textContainer = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(12)
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
+
+        val title = TextView(requireContext()).apply {
+            text = category.name
+            setTextColor(requireContext().getColor(R.color.text_primary))
+            textSize = 15f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+
+        val keywords = TextView(requireContext()).apply {
+            text = category.keywords.ifBlank { "No keywords yet" }
+            setTextColor(requireContext().getColor(R.color.text_secondary))
+            textSize = 12f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+
+        textContainer.addView(title)
+        textContainer.addView(keywords)
+        row.addView(icon)
+        row.addView(textContainer)
+
+        row.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            bottomMargin = dp(8)
+        }
+
+        return row
+    }
+
+    private fun selectedCircleBackground(): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(requireContext().getColor(R.color.onboarding_chip_green))
+            setStroke(dp(1), requireContext().getColor(R.color.brand_dark_green))
+        }
+    }
+
+    private fun colorCircleBackground(colorHex: String): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.parseColor(colorHex))
+            setStroke(dp(2), Color.WHITE)
+        }
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
     }
 
     private fun isBatteryOptimizationIgnored(): Boolean {

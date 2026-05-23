@@ -103,6 +103,20 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    fun ensureCategoriesLoaded() {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    repository.getAllCategoriesList()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load categories.", e)
+            }
+        }
+    }
+
     fun addRecurringTransaction(
         amount: Double,
         description: String,

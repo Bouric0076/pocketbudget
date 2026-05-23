@@ -17,4 +17,26 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsTranslucent">true</item>
     </style>
+    <style name="Widget.App.ToggleButton" parent="Widget.MaterialComponents.Button.TextButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="cornerRadius">12dp</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="backgroundTint">@android:color/transparent</item>
+    </style>
+    <style name="Widget.App.AmountInput" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="boxCornerRadiusTopStart">14dp</item>
+        <item name="boxCornerRadiusTopEnd">14dp</item>
+        <item name="boxCornerRadiusBottomStart">14dp</item>
+        <item name="boxCornerRadiusBottomEnd">14dp</item>
+        <item name="boxStrokeColor">@color/brand_dark_green</item>
+        <item name="hintTextColor">@color/brand_dark_green</item>
+    </style>
+    <style name="Widget.App.RoundedInput" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="boxCornerRadiusTopStart">11dp</item>
+        <item name="boxCornerRadiusTopEnd">11dp</item>
+        <item name="boxCornerRadiusBottomStart">11dp</item>
+        <item name="boxCornerRadiusBottomEnd">11dp</item>
+        <item name="boxStrokeColor">@color/brand_dark_green</item>
+        <item name="hintTextColor">@color/brand_dark_green</item>
+    </style>
 </resources>

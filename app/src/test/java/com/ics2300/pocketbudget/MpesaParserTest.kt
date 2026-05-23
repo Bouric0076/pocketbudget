@@ -25,6 +25,8 @@ class MpesaParserTest {
         } else {
             println("Not Matched")
         }
+    }
+
     @Test
     fun testReversalNewFormat() {
         val body = "UA26UGIL70 confirmed. Reversal of transaction UA26U2IPRD has been completed successfully on 2/1/26 at 11:11 AM and Ksh50.00 has been credited to your M-Pesa Account."

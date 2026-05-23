@@ -9,5 +9,6 @@ data class CategorySpending(
 
 data class ActorSpending(
     val partyName: String,
-    val totalAmount: Double
+    val totalAmount: Double,
+    val transactionCount: Int
 )

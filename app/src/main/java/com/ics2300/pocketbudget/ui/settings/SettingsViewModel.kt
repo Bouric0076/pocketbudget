@@ -28,11 +28,20 @@ class SettingsViewModel(
     private val _syncStatus = MutableLiveData<SyncResult>()
     val syncStatus: LiveData<SyncResult> = _syncStatus
 
+    private val _categoryActionStatus = MutableLiveData<CategoryActionResult>()
+    val categoryActionStatus: LiveData<CategoryActionResult> = _categoryActionStatus
+
     fun exportData(context: Context, uri: Uri) {
         viewModelScope.launch {
             try {
                 val transactions = repository.allTransactions.first()
-                val result = CsvExporter.exportTransactions(context, uri, transactions)
+                val categories = repository.getAllCategoriesList()
+                val result = CsvExporter.exportTransactions(
+                    context,
+                    uri,
+                    transactions,
+                    categories
+                )
 
                 if (result.isSuccess) {
                     Toast.makeText(context, "CSV Export Successful", Toast.LENGTH_SHORT).show()
@@ -110,7 +119,8 @@ class SettingsViewModel(
             _syncStatus.value = SyncResult.Loading
 
             try {
-                val result = CsvImporter.importTransactions(context, uri)
+                val categories = repository.getAllCategoriesList()
+                val result = CsvImporter.importTransactions(context, uri, categories)
 
                 if (result.isSuccess) {
                     val transactions = result.getOrNull().orEmpty()
@@ -140,27 +150,87 @@ class SettingsViewModel(
         colorHex: String = "#0A3D2E"
     ) {
         viewModelScope.launch {
-            repository.addCategory(
-                CategoryEntity(
-                    name = name,
-                    keywords = keywords,
-                    iconName = iconName,
-                    colorHex = colorHex
-                )
-            )
+            try {
+                val recategorizedCount =
+                    repository.addCategory(
+                        CategoryEntity(
+                            name = name,
+                            keywords = keywords,
+                            iconName = iconName,
+                            colorHex = colorHex
+                        )
+                    )
+
+                _categoryActionStatus.value =
+                    CategoryActionResult.Success(
+                        action = CategoryAction.Added,
+                        recategorizedCount = recategorizedCount
+                    )
+            } catch (e: Exception) {
+                _categoryActionStatus.value =
+                    CategoryActionResult.Error(
+                        e.message ?: "Failed to add category"
+                    )
+            }
         }
     }
 
     fun updateCategory(category: CategoryEntity) {
         viewModelScope.launch {
-            repository.updateCategory(category)
+            try {
+                val recategorizedCount = repository.updateCategory(category)
+
+                _categoryActionStatus.value =
+                    CategoryActionResult.Success(
+                        action = CategoryAction.Updated,
+                        recategorizedCount = recategorizedCount
+                    )
+            } catch (e: Exception) {
+                _categoryActionStatus.value =
+                    CategoryActionResult.Error(
+                        e.message ?: "Failed to update category"
+                    )
+            }
         }
     }
 
     fun deleteCategory(categoryId: Int) {
         viewModelScope.launch {
-            repository.deleteCategory(categoryId)
+            try {
+                repository.deleteCategory(categoryId)
+                _categoryActionStatus.value =
+                    CategoryActionResult.Success(
+                        action = CategoryAction.Deleted,
+                        recategorizedCount = 0
+                    )
+            } catch (e: Exception) {
+                _categoryActionStatus.value =
+                    CategoryActionResult.Error(
+                        e.message ?: "Failed to delete category"
+                    )
+            }
         }
+    }
+
+    fun clearCategoryActionStatus() {
+        _categoryActionStatus.value = CategoryActionResult.Idle
+    }
+
+    sealed class CategoryActionResult {
+        data object Idle : CategoryActionResult()
+
+        data class Success(
+            val action: CategoryAction,
+            val recategorizedCount: Int
+        ) : CategoryActionResult()
+
+        data class Error(val message: String) : CategoryActionResult()
+    }
+
+    enum class CategoryAction {
+        Added,
+        Updated,
+        Deleted
     }
 
     fun clearAllData() {

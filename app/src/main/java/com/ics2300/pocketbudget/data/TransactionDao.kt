@@ -80,14 +80,17 @@ interface TransactionDao {
     @Query("UPDATE transactions SET categoryId = :categoryId WHERE id = :transactionId")
     suspend fun updateTransactionCategory(transactionId: Int, categoryId: Int)
 
-    @Query("UPDATE transactions SET categoryId = :categoryId WHERE partyName = :partyName")
+    @Query("UPDATE transactions SET categoryId = :categoryId WHERE UPPER(TRIM(partyName)) = :partyName")
     suspend fun updateTransactionsCategoryByPartyName(partyName: String, categoryId: Int)
 
     @Query("SELECT * FROM transactions WHERE id = :transactionId")
     suspend fun getTransactionById(transactionId: Int): TransactionEntity?
 
-    @Query("SELECT * FROM transactions WHERE partyName = :partyName AND categoryId IS NOT NULL")
+    @Query("SELECT * FROM transactions WHERE UPPER(TRIM(partyName)) = :partyName AND categoryId IS NOT NULL")
     suspend fun getCategorizedTransactionsByPartyName(partyName: String): List<TransactionEntity>
+
+    @Query("SELECT * FROM transactions WHERE categoryId IS NULL OR categoryId = :uncategorizedCategoryId")
+    suspend fun getUncategorizedTransactions(uncategorizedCategoryId: Int): List<TransactionEntity>
 
     @Query("SELECT * FROM recurring_transactions WHERE isActive = 1")
     fun getAllRecurringTransactions(): Flow<List<RecurringTransactionEntity>>
@@ -119,6 +122,9 @@ interface TransactionDao {
     @Query("DELETE FROM budgets")
     suspend fun deleteAllBudgets()
 
+    @Query("DELETE FROM budgets WHERE categoryId = :categoryId")
+    suspend fun deleteBudgetsForCategory(categoryId: Int)
+
     @Query("SELECT * FROM categories WHERE id = :id")
     suspend fun getCategoryById(id: Int): CategoryEntity?
 
@@ -133,6 +139,12 @@ interface TransactionDao {
 
     @Query("DELETE FROM categories WHERE id = :id")
     suspend fun deleteCategory(id: Int)
+
+    @Query("UPDATE transactions SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
+    suspend fun reassignTransactionsCategory(oldCategoryId: Int, newCategoryId: Int)
+
+    @Query("UPDATE recurring_transactions SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
+    suspend fun reassignRecurringTransactionsCategory(oldCategoryId: Int, newCategoryId: Int)
 
     @Query("SELECT * FROM categories")
     suspend fun getAllCategoriesList(): List<CategoryEntity>
@@ -158,7 +170,7 @@ interface TransactionDao {
 
     @Query(
         """
-        SELECT partyName, SUM(amount) as totalAmount
+        SELECT partyName, SUM(amount) as totalAmount, COUNT(*) as transactionCount
         FROM transactions
         WHERE type NOT IN ('Received', 'Deposit', 'Reversal')
         GROUP BY partyName
@@ -170,7 +182,7 @@ interface TransactionDao {
 
     @Query(
         """
-        SELECT partyName, SUM(amount) as totalAmount
+        SELECT partyName, SUM(amount) as totalAmount, COUNT(*) as transactionCount
         FROM transactions
         WHERE type NOT IN ('Received', 'Deposit', 'Reversal')
         AND timestamp BETWEEN :startDate AND :endDate
@@ -239,6 +251,9 @@ interface TransactionDao {
 
     @Query("SELECT * FROM actor_category_mappings")
     suspend fun getAllActorMappings(): List<ActorCategoryMapping>
+
+    @Query("DELETE FROM actor_category_mappings WHERE categoryId = :categoryId")
+    suspend fun deleteActorMappingsForCategory(categoryId: Int)
 
     @Transaction
     suspend fun updateCategoryAndLearnActor(

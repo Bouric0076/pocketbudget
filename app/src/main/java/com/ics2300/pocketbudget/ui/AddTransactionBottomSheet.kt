@@ -1,5 +1,6 @@
 package com.ics2300.pocketbudget.ui
 
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -8,6 +9,7 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Toast
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.google.android.material.chip.Chip
 import com.ics2300.pocketbudget.MainApplication
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.CategoryEntity
@@ -26,7 +28,9 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
 
     private val viewModel: DashboardViewModel by activityViewModels()
     
-    private var selectedCategoryId: Int = 1 // Default Uncategorized
+    private var selectedCategoryId: Int? = null
+    private var availableCategories: List<CategoryEntity> = emptyList()
+    private var userSelectedCategory = false
     private var isIncome = false
 
     override fun onCreateView(
@@ -45,6 +49,8 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
         setupCategories()
         setupRecurringOptions()
         setupSaveButton()
+        binding.btnClose.setOnClickListener { dismiss() }
+        viewModel.ensureCategoriesLoaded()
     }
 
     private fun setupRecurringOptions() {
@@ -54,32 +60,144 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
 
         binding.switchRecurring.setOnCheckedChangeListener { _, isChecked ->
             binding.layoutFrequency.visibility = if (isChecked) View.VISIBLE else View.GONE
+            updateSaveButtonLabel()
         }
+
+        updateSaveButtonLabel()
     }
 
     private fun setupToggle() {
         binding.toggleType.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
                 isIncome = checkedId == R.id.btn_income
+                updateSaveButtonLabel()
+                if (!userSelectedCategory) {
+                    applyDefaultCategory()
+                }
             }
         }
+
+        binding.toggleType.check(R.id.btn_expense)
     }
 
     private fun setupCategories() {
         viewModel.categories.observe(viewLifecycleOwner) { categories ->
-            val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, categories.map { it.name })
+            availableCategories = categories
+            populateCategoryChips(categories)
+
+            val adapter = ArrayAdapter(
+                requireContext(),
+                android.R.layout.simple_dropdown_item_1line,
+                categories.map { it.name }
+            )
             binding.editCategory.setAdapter(adapter)
+
+            if (
+                selectedCategoryId == null ||
+                categories.none { it.id == selectedCategoryId }
+            ) {
+                applyDefaultCategory()
+            }
             
             binding.editCategory.setOnItemClickListener { _, _, position, _ ->
                 selectedCategoryId = categories[position].id
+                userSelectedCategory = true
+                binding.layoutCategory.error = null
+                syncCheckedCategoryChip()
             }
         }
+    }
+
+    private fun populateCategoryChips(categories: List<CategoryEntity>) {
+        binding.chipGroupCategories.removeAllViews()
+
+        categories.take(5).forEach { category ->
+            val chip = Chip(requireContext()).apply {
+                text = category.name
+                isCheckable = true
+                isClickable = true
+                shapeAppearanceModel =
+                    shapeAppearanceModel.toBuilder()
+                        .setAllCornerSizes(20f)
+                        .build()
+                textSize = 11f
+                tag = category.id
+                setOnCheckedChangeListener { _, checked ->
+                    if (checked) {
+                        selectedCategoryId = category.id
+                        userSelectedCategory = true
+                        binding.editCategory.setText(category.name, false)
+                        binding.layoutCategory.error = null
+                    }
+                }
+            }
+            binding.chipGroupCategories.addView(chip)
+        }
+
+        syncCheckedCategoryChip()
+    }
+
+    private fun applyDefaultCategory() {
+        val defaultCategory = if (isIncome) {
+            availableCategories.firstOrNull {
+                it.name.equals("Income", ignoreCase = true)
+            }
+        } else {
+            availableCategories.firstOrNull {
+                it.name.equals("Uncategorized", ignoreCase = true)
+            }
+        } ?: availableCategories.firstOrNull()
+
+        selectedCategoryId = defaultCategory?.id
+        binding.editCategory.setText(defaultCategory?.name.orEmpty(), false)
+        syncCheckedCategoryChip()
+    }
+
+    private fun syncCheckedCategoryChip() {
+        val selectedId = selectedCategoryId
+
+        for (index in 0 until binding.chipGroupCategories.childCount) {
+            val chip = binding.chipGroupCategories.getChildAt(index) as? Chip
+            chip?.setOnCheckedChangeListener(null)
+            chip?.isChecked = chip?.tag == selectedId
+            chip?.setOnCheckedChangeListener { button, checked ->
+                if (checked) {
+                    val categoryId = button.tag as? Int ?: return@setOnCheckedChangeListener
+                    val category = availableCategories.firstOrNull { it.id == categoryId }
+                        ?: return@setOnCheckedChangeListener
+
+                    selectedCategoryId = category.id
+                    userSelectedCategory = true
+                    binding.editCategory.setText(category.name, false)
+                    binding.layoutCategory.error = null
+                }
+            }
+        }
+    }
+
+    private fun updateSaveButtonLabel() {
+        val isRecurring = binding.switchRecurring.isChecked
+        binding.btnSaveTransaction.text = when {
+            isRecurring -> "Set Recurring"
+            isIncome -> "Save Income"
+            else -> "Save Expense"
+        }
+
+        val color = if (isIncome) {
+            R.color.brand_dark_green
+        } else {
+            R.color.status_error
+        }
+        binding.btnSaveTransaction.backgroundTintList =
+            ColorStateList.valueOf(requireContext().getColor(color))
     }
 
     private fun setupSaveButton() {
         binding.btnSaveTransaction.setOnClickListener {
             val amountStr = binding.editAmount.text.toString()
             val note = binding.editNote.text.toString()
+            binding.layoutAmount.error = null
+            binding.layoutCategory.error = null
             
             if (amountStr.isBlank()) {
                 binding.layoutAmount.error = "Enter amount"
@@ -93,9 +211,15 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
             }
 
             if (note.isBlank()) {
-                binding.layoutNote.error = "Enter a note"
+                binding.layoutNote.error = null
+            }
+
+            val categoryId = selectedCategoryId
+            if (categoryId == null) {
+                binding.layoutCategory.error = "Choose a category"
                 return@setOnClickListener
             }
+
             val isRecurring = binding.switchRecurring.isChecked
             
             if (isRecurring) {
@@ -105,7 +229,7 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
                 viewModel.addRecurringTransaction(
                     amount = amount,
                     description = description,
-                    categoryId = selectedCategoryId,
+                    categoryId = categoryId,
                     type = if (isIncome) "Deposit" else "Withdrawal",
                     frequency = frequency,
                     startDate = System.currentTimeMillis()
@@ -118,7 +242,7 @@ class AddTransactionBottomSheet : BottomSheetDialogFragment() {
                     amount = amount,
                     type = if (isIncome) "Deposit" else "Withdrawal",
                     timestamp = System.currentTimeMillis(),
-                    categoryId = selectedCategoryId
+                    categoryId = categoryId
                 )
                 
                 viewModel.addTransaction(transaction)

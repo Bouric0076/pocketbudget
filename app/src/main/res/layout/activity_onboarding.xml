@@ -22,8 +22,8 @@
         android:orientation="vertical"
         android:paddingStart="24dp"
         android:paddingEnd="24dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="16dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -39,6 +39,7 @@
             app:tabGravity="center"
             app:tabIndicatorHeight="0dp"
             app:tabMinWidth="0dp"
+            app:tabRippleColor="@android:color/transparent"
             app:tabPaddingStart="4dp"
             app:tabPaddingEnd="4dp" />
 
@@ -46,7 +47,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_next"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="54dp"
             android:text="Next"
             android:textSize="15sp"
             android:fontFamily="sans-serif-medium"
@@ -57,7 +58,7 @@
         <TextView
             android:id="@+id/btn_skip"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
+            android:layout_height="40dp"
             android:gravity="center"
             android:text="Skip"
             android:textSize="14sp"
@@ -73,11 +74,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="Read our Privacy Policy"
+            android:text="Privacy policy and SMS use"
             android:textSize="12sp"
             android:textColor="@color/brand_dark_green"
             android:visibility="gone"
-            android:paddingBottom="4dp" />
+            android:paddingTop="2dp"
+            android:paddingBottom="4dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground" />
 
     </LinearLayout>
 

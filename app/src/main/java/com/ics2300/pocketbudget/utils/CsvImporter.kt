@@ -2,6 +2,7 @@ package com.ics2300.pocketbudget.utils
 
 import android.content.Context
 import android.net.Uri
+import com.ics2300.pocketbudget.data.CategoryEntity
 import com.ics2300.pocketbudget.data.TransactionEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,63 +13,95 @@ import java.util.Locale
 
 object CsvImporter {
 
-    // Simple CSV parser that handles standard CSV format
-    // Assumes header: ID,Date,Amount,Type,Party,Category
-    // ID can be ignored/regenerated if we want, or used for deduplication. 
-    // Here we will use the ID from CSV if present, or generate if missing (though export has it).
-    
     data class ImportResult(val successCount: Int, val failedCount: Int, val errors: List<String>)
 
-    suspend fun importTransactions(context: Context, uri: Uri): Result<List<TransactionEntity>> {
+    internal fun parseTransactions(
+        lines: Sequence<String>,
+        categories: List<CategoryEntity> = emptyList(),
+        nowMillis: Long = System.currentTimeMillis()
+    ): List<TransactionEntity> {
+        val transactions = mutableListOf<TransactionEntity>()
+        val iterator = lines.iterator()
+
+        if (!iterator.hasNext()) {
+            return transactions
+        }
+
+        val header = parseCsvLine(iterator.next())
+            .map { token -> normalizeHeader(token) }
+        val columns = CsvColumns.fromHeader(header)
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val categoryIdByName =
+            categories.associateBy { normalizeCategoryName(it.name) }
+
+        while (iterator.hasNext()) {
+            val line = iterator.next()
+            if (line.isBlank()) continue
+
+            try {
+                val tokens = parseCsvLine(line)
+                if (tokens.size >= 5) {
+                    val id = tokens.getOrBlank(columns.id)
+                    val dateStr = tokens.getOrBlank(columns.date)
+                    val amount = tokens.getOrBlank(columns.amount).toDoubleOrNull() ?: 0.0
+                    val type = tokens.getOrBlank(columns.type)
+                    val party = tokens.getOrBlank(columns.party)
+                    val categoryName = tokens.getOrBlank(columns.categoryName)
+                    val legacyCategoryId =
+                        tokens.getOrBlank(columns.categoryId).toIntOrNull()
+                    val categoryId =
+                        categoryIdByName[normalizeCategoryName(categoryName)]?.id
+                            ?: legacyCategoryId?.takeIf { id ->
+                                categories.any { it.id == id }
+                            }
+
+                    val timestamp = try {
+                        dateFormat.parse(dateStr)?.time ?: nowMillis
+                    } catch (e: Exception) {
+                        nowMillis
+                    }
+
+                    val finalId = if (id.isNotEmpty()) {
+                        id
+                    } else {
+                        "IMP_${nowMillis}_${transactions.size}"
+                    }
+
+                    transactions.add(
+                        TransactionEntity(
+                            transactionId = finalId,
+                            amount = amount,
+                            type = type,
+                            partyName = party,
+                            timestamp = timestamp,
+                            categoryId = categoryId
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        return transactions
+    }
+
+    suspend fun importTransactions(
+        context: Context,
+        uri: Uri,
+        categories: List<CategoryEntity> = emptyList()
+    ): Result<List<TransactionEntity>> {
         return withContext(Dispatchers.IO) {
             val transactions = mutableListOf<TransactionEntity>()
             try {
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
                     BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                        var line = reader.readLine() // Read Header
-                        // Validate header if needed, for now skip
-                        
-                        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                        
-                        while (reader.readLine().also { line = it } != null) {
-                            if (line.isNullOrBlank()) continue
-                            
-                            try {
-                                val tokens = parseCsvLine(line!!)
-                                if (tokens.size >= 5) {
-                                    // ID, Date, Amount, Type, Party, Category
-                                    val id = tokens[0].trim()
-                                    val dateStr = tokens[1].trim()
-                                    val amount = tokens[2].trim().toDoubleOrNull() ?: 0.0
-                                    val type = tokens[3].trim()
-                                    val party = tokens[4].trim()
-                                    val categoryId = if (tokens.size > 5) tokens[5].trim().toIntOrNull() else null
-
-                                    val timestamp = try {
-                                        dateFormat.parse(dateStr)?.time ?: System.currentTimeMillis()
-                                    } catch (e: Exception) {
-                                        System.currentTimeMillis()
-                                    }
-
-                                    // If ID is empty (e.g. from manual CSV), generate one
-                                    val finalId = if (id.isNotEmpty()) id else "IMP_${System.currentTimeMillis()}_${(0..1000).random()}"
-
-                                    transactions.add(
-                                        TransactionEntity(
-                                            transactionId = finalId,
-                                            amount = amount,
-                                            type = type,
-                                            partyName = party,
-                                            timestamp = timestamp,
-                                            categoryId = categoryId
-                                        )
-                                    )
-                                }
-                            } catch (e: Exception) {
-                                // Skip malformed lines
-                                e.printStackTrace()
-                            }
-                        }
+                        transactions.addAll(
+                            parseTransactions(
+                                reader.lineSequence(),
+                                categories
+                            )
+                        )
                     }
                 }
                 Result.success(transactions)
@@ -78,7 +111,62 @@ object CsvImporter {
         }
     }
 
-    private fun parseCsvLine(line: String): List<String> {
+    private data class CsvColumns(
+        val id: Int = 0,
+        val date: Int = 1,
+        val amount: Int = 2,
+        val type: Int = 3,
+        val party: Int = 4,
+        val categoryId: Int = 5,
+        val categoryName: Int = -1
+    ) {
+        companion object {
+            fun fromHeader(header: List<String>): CsvColumns {
+                if (header.isEmpty()) {
+                    return CsvColumns()
+                }
+
+                fun indexOf(name: String): Int {
+                    return header.indexOf(name)
+                }
+
+                return CsvColumns(
+                    id = indexOf("id").takeIfFound(default = 0),
+                    date = indexOf("date").takeIfFound(default = 1),
+                    amount = indexOf("amount").takeIfFound(default = 2),
+                    type = indexOf("type").takeIfFound(default = 3),
+                    party = indexOf("party").takeIfFound(default = 4),
+                    categoryId = listOf(
+                        indexOf("categoryid"),
+                        indexOf("category")
+                    ).firstOrNull { it >= 0 } ?: 5,
+                    categoryName = indexOf("categoryname")
+                )
+            }
+        }
+    }
+
+    private fun Int.takeIfFound(default: Int): Int {
+        return if (this >= 0) this else default
+    }
+
+    private fun List<String>.getOrBlank(index: Int): String {
+        return if (index in indices) this[index].trim() else ""
+    }
+
+    private fun normalizeHeader(value: String): String {
+        return value
+            .trim()
+            .replace("_", "")
+            .replace(" ", "")
+            .lowercase(Locale.US)
+    }
+
+    private fun normalizeCategoryName(value: String): String {
+        return value.trim().uppercase(Locale.US)
+    }
+
+    internal fun parseCsvLine(line: String): List<String> {
         val tokens = mutableListOf<String>()
         var sb = StringBuilder()
         var inQuotes = false

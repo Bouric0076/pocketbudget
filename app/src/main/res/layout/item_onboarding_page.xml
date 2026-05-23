@@ -4,22 +4,22 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- Hero zone: top 46% of screen -->
+    <!-- Hero zone -->
     <androidx.compose.ui.platform.ComposeView
         android:id="@+id/compose_hero"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="0.46" />
+        android:layout_weight="0.40" />
 
     <!-- Content zone -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="0.54"
+        android:layout_weight="0.60"
         android:orientation="vertical"
         android:paddingStart="32dp"
         android:paddingEnd="32dp"
-        android:paddingTop="28dp">
+        android:paddingTop="24dp">
 
         <!-- Chip label -->
         <TextView
@@ -33,7 +33,6 @@
             android:paddingBottom="4dp"
             android:textSize="11sp"
             android:fontFamily="sans-serif-medium"
-            android:letterSpacing="0.05"
             android:layout_marginBottom="12dp" />
 
         <!-- Title: 2 lines, large -->
@@ -41,19 +40,19 @@
             android:id="@+id/text_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="26sp"
+            android:textSize="24sp"
             android:lineSpacingMultiplier="1.15"
             android:fontFamily="sans-serif-medium"
             android:textColor="@color/text_primary"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="10dp" />
 
         <!-- Description -->
         <TextView
             android:id="@+id/text_desc"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="14sp"
-            android:lineSpacingMultiplier="1.6"
+            android:textSize="15sp"
+            android:lineSpacingMultiplier="1.45"
             android:textColor="@color/text_secondary"
             android:fontFamily="sans-serif" />
 

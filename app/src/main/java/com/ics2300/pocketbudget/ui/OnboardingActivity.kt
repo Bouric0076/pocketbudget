@@ -9,7 +9,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,14 +25,11 @@ import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import com.ics2300.pocketbudget.MainActivity
 import com.ics2300.pocketbudget.R
-import com.ics2300.pocketbudget.utils.AutoStartHelper
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,9 +39,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -86,6 +80,10 @@ class OnboardingActivity : AppCompatActivity() {
         btnSkip = findViewById(R.id.btn_skip)
         tabLayout = findViewById(R.id.tab_layout)
         privacyPolicyLink = findViewById(R.id.text_privacy_policy_link)
+        privacyPolicyLink.setOnClickListener {
+            pulseButton(it)
+            showPrivacyPolicy()
+        }
     }
 
     private fun setupWindowInsets() {
@@ -103,9 +101,9 @@ class OnboardingActivity : AppCompatActivity() {
 
         val pages = listOf(
             OnboardingPage(
-                title = "Track every\nM-Pesa spend",
+                title = "M-Pesa spending,\nclearly tracked",
                 chipLabel = "Smart tracking",
-                description = "Transactions detected automatically from SMS. No manual entry — ever.",
+                description = "PocketBudget turns confirmed M-Pesa SMS into organized transactions without manual entry.",
                 iconRes = R.drawable.ic_money,
                 heroBackground = R.color.onboarding_hero_green,
                 accentColor = R.color.brand_dark_green,
@@ -113,9 +111,9 @@ class OnboardingActivity : AppCompatActivity() {
                 pageType = PageType.STANDARD
             ),
             OnboardingPage(
-                title = "Why we need\nSMS access",
-                chipLabel = "Privacy first",
-                description = "Your data is read locally and never leaves your device. You stay in full control.",
+                title = "Private by design,\nwith your consent",
+                chipLabel = "SMS permission",
+                description = "We only scan M-Pesa messages on this phone. Your budget data stays local and you can revoke access anytime.",
                 iconRes = R.drawable.ic_privacy_outline,
                 heroBackground = R.color.onboarding_hero_indigo,
                 accentColor = R.color.brand_indigo,
@@ -123,9 +121,9 @@ class OnboardingActivity : AppCompatActivity() {
                 pageType = PageType.PERMISSIONS
             ),
             OnboardingPage(
-                title = "Set spending\nlimits by category",
+                title = "Know your limits\nbefore you overspend",
                 chipLabel = "Budget goals",
-                description = "Food, Transport, Utilities — know when you're approaching your limit.",
+                description = "Set category budgets for food, transport, utilities, and more, then spot pressure early.",
                 iconRes = R.drawable.ic_category,
                 heroBackground = R.color.onboarding_hero_amber,
                 accentColor = R.color.brand_amber,
@@ -133,9 +131,9 @@ class OnboardingActivity : AppCompatActivity() {
                 pageType = PageType.STANDARD
             ),
             OnboardingPage(
-                title = "You're all set,\nlet's go",
+                title = "Ready for a\nclearer budget",
                 chipLabel = "Ready",
-                description = "Your finances are about to get a whole lot clearer.",
+                description = "Start with your dashboard, sync recent transactions, and adjust categories as you learn your spending.",
                 iconRes = R.drawable.ic_check_circle,
                 heroBackground = R.color.brand_dark_green,
                 accentColor = R.color.brand_dark_green,
@@ -164,10 +162,10 @@ class OnboardingActivity : AppCompatActivity() {
 
         when (page.pageType) {
             PageType.PERMISSIONS -> {
-                animateButtonTo("Review & Grant", R.color.brand_indigo)
+                animateButtonTo("Review SMS access", R.color.brand_indigo)
                 btnNext.setOnClickListener {
                     pulseButton(btnNext)
-                    showProminentDisclosure()
+                    showPrivacyPolicy(requestPermissionOnAccept = true)
                 }
                 btnSkip.setOnClickListener {
                     pulseButton(btnSkip)
@@ -177,7 +175,7 @@ class OnboardingActivity : AppCompatActivity() {
                 privacyPolicyLink.isVisible = true
             }
             PageType.FINISH -> {
-                animateButtonTo("Get started →", R.color.brand_dark_green)
+                animateButtonTo("Get started", R.color.brand_dark_green)
                 btnNext.setOnClickListener {
                     pulseButton(btnNext)
                     finishOnboardingWithAnimation()
@@ -186,7 +184,7 @@ class OnboardingActivity : AppCompatActivity() {
                 privacyPolicyLink.isVisible = false
             }
             else -> {
-                val label = if (isLastPage) "Get started →" else "Next"
+                val label = if (isLastPage) "Get started" else "Next"
                 animateButtonTo(label, R.color.brand_dark_green)
                 btnNext.setOnClickListener {
                     pulseButton(btnNext)
@@ -207,7 +205,6 @@ class OnboardingActivity : AppCompatActivity() {
             }
         }
 
-        // Auto-start page logic (page 2 if you keep it, otherwise handled above)
     }
 
     private fun animateButtonTo(label: String, colorRes: Int) {
@@ -248,23 +245,12 @@ class OnboardingActivity : AppCompatActivity() {
         viewPager.animate().alpha(1f).setDuration(400).start()
     }
 
-    private fun showProminentDisclosure() {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_prominent_disclosure, null)
-        val dialog = MaterialAlertDialogBuilder(this, R.style.Theme_Pocketbudget_Dialog)
-            .setView(dialogView).setCancelable(false).create()
-
-        dialogView.findViewById<MaterialButton>(R.id.btn_disclosure_accept).setOnClickListener {
-            dialog.dismiss(); requestPermissions()
-        }
-        dialogView.findViewById<MaterialButton>(R.id.btn_disclosure_decline).setOnClickListener {
-            dialog.dismiss()
-        }
-        dialog.show()
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-    }
-
-    private fun showPrivacyPolicy() {
-        PrivacyPolicyFragment.newInstance().show(supportFragmentManager, PrivacyPolicyFragment.TAG)
+    private fun showPrivacyPolicy(requestPermissionOnAccept: Boolean = false) {
+        PrivacyPolicyFragment.newInstance().apply {
+            if (requestPermissionOnAccept) {
+                setOnAcceptListener { requestPermissions() }
+            }
+        }.show(supportFragmentManager, PrivacyPolicyFragment.TAG)
     }
 
     private fun requestPermissions() {

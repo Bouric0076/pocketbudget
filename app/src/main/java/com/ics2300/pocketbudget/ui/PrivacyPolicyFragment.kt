@@ -1,7 +1,5 @@
 package com.ics2300.pocketbudget.ui
 
-import android.animation.Animator
-import android.animation.ObjectAnimator
 import android.os.Bundle
 import android.text.Html
 import android.view.LayoutInflater
@@ -15,7 +13,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.ics2300.pocketbudget.R
 
-import android.graphics.drawable.Drawable
 import androidx.core.content.ContextCompat
 
 class PrivacyPolicyFragment : BottomSheetDialogFragment() {
@@ -59,8 +56,15 @@ class PrivacyPolicyFragment : BottomSheetDialogFragment() {
         setupBottomSheet()
         
         val contentTextView = view.findViewById<TextView>(R.id.text_privacy_policy_content)
-        val closeButton = view.findViewById<View>(R.id.btn_privacy_policy_close)
+        val closeButton = view.findViewById<MaterialButton>(R.id.btn_privacy_policy_close)
         val acceptButton = view.findViewById<MaterialButton>(R.id.btn_privacy_policy_accept)
+        val opensPermissionRequest = onAcceptListener != null
+        acceptButton.text = if (opensPermissionRequest) {
+            "Allow SMS tracking"
+        } else {
+            "Got it"
+        }
+        closeButton.text = if (opensPermissionRequest) "Not now" else "Close"
         
         // Format policy content with modern styling
         val policyContent = getFormattedPolicyContent()
@@ -110,23 +114,19 @@ class PrivacyPolicyFragment : BottomSheetDialogFragment() {
         
         return """
             <br>
-            <b><font color="$colorPrimary">Data Collection</font></b><br>
-            PocketBudget only accesses SMS messages related to M-Pesa transactions. We do not read personal messages or share any data with third parties.<br><br>
+            <b><font color="$colorPrimary">What SMS access is used for</font></b><br>
+            PocketBudget reads SMS from M-Pesa senders so it can detect confirmed transactions, amounts, dates, merchants, transaction costs, and balances for budgeting.<br><br>
             
-            <b><font color="$colorPrimary">Data Storage</font></b><br>
-            All your financial data is stored locally on your device. We never upload your transaction history to any external servers.<br><br>
+            <b><font color="$colorPrimary">What is not collected</font></b><br>
+            We do not collect personal chats, contacts, location, photos, files, or messages from non-M-Pesa senders.<br><br>
             
-            <b><font color="$colorPrimary">Security</font></b><br>
-            Your data is encrypted using Android's built-in security features. No one, including us, can access your information without your permission.<br><br>
+            <b><font color="$colorPrimary">Where your data stays</font></b><br>
+            Transaction data is stored locally on your phone. PocketBudget does not upload, sell, or share your transaction history with third parties.<br><br>
             
-            <font color="$colorSecondary"><b>What we track:</b></font> M-Pesa transaction amounts, dates, and descriptions for budgeting purposes.<br>
-            <font color="$colorSecondary"><b>What we don't track:</b></font> Personal messages, contacts, location, or any other sensitive information.<br><br>
+            <font color="$colorSecondary"><b>You stay in control:</b></font> SMS permission can be revoked anytime in Android Settings. Without SMS access, automatic tracking and sync will not work.<br><br>
             
-            <b><font color="$colorPrimary">Permissions</font></b><br>
-            We only request SMS permissions to provide automatic expense tracking. You can revoke these permissions at any time from your device settings.<br><br>
-            
-            <b><font color="$colorPrimary">Contact Us</font></b><br>
-            If you have questions about your privacy, please contact us at: <b>privacy@pocketbudget.com</b><br>
+            <b><font color="$colorPrimary">Contact</font></b><br>
+            Questions about privacy: <b>privacy@pocketbudget.com</b><br>
         """.trimIndent()
     }
     
