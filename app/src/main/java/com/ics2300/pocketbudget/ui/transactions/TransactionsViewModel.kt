@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import com.ics2300.pocketbudget.data.TransactionWithCategory
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +23,16 @@ enum class SortType {
     DATE_DESC, DATE_ASC, AMOUNT_DESC, AMOUNT_ASC, ALPHABETICAL
 }
 
-data class Filters(val min: Double?, val max: Double?, val actor: String?, val sort: SortType)
+private data class QueryParams(
+    val query: String?,
+    val filterType: String,
+    val startDate: Long?,
+    val endDate: Long?,
+    val minAmount: Double?,
+    val maxAmount: Double?,
+    val actor: String?,
+    val sortType: String
+)
 
 @HiltViewModel
 class TransactionsViewModel @Inject constructor(private val repository: TransactionRepository) : ViewModel() {
@@ -35,59 +45,54 @@ class TransactionsViewModel @Inject constructor(private val repository: Transact
     val selectedActorFilter = MutableStateFlow<String?>(null)
     private val sortType = MutableStateFlow(SortType.DATE_DESC)
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val transactionsWithCategory: LiveData<List<com.ics2300.pocketbudget.data.TransactionWithCategory>> = combine(
-        repository.transactionsWithCategory,
         searchQuery,
         filterType,
         dateRangeFilter,
-        combine(minAmountFilter, maxAmountFilter, selectedActorFilter, sortType) { min, max, actor, sort ->
-            Filters(min, max, actor, sort)
-        }
-    ) { transactions, query, filter, dateRange, filters ->
-        val (min, max, actor, sort) = filters
-        var filteredList = transactions
+        minAmountFilter,
+        maxAmountFilter,
+        selectedActorFilter,
+        sortType
+    ) { array ->
+        val query = array[0] as String
+        val filter = array[1] as TransactionFilter
+        @Suppress("UNCHECKED_CAST")
+        val dateRange = array[2] as Pair<Long, Long>?
+        val min = array[3] as Double?
+        val max = array[4] as Double?
+        val actor = array[5] as String?
+        val sort = array[6] as SortType
 
-        if (query.isNotBlank()) {
-            filteredList = filteredList.filter {
-                it.transaction.partyName.contains(query, ignoreCase = true) ||
-                        (it.transaction.fullSmsBody?.contains(query, ignoreCase = true) == true) ||
-                        (it.category?.name?.contains(query, ignoreCase = true) == true)
+        QueryParams(
+            query = if (query.isBlank()) null else query,
+            filterType = filter.name,
+            startDate = dateRange?.first,
+            endDate = dateRange?.second,
+            minAmount = min,
+            maxAmount = max,
+            actor = actor,
+            sortType = sort.name
+        )
+    }.flatMapLatest { params ->
+        repository.getFilteredTransactionsWithCategory(
+            query = params.query,
+            filterType = params.filterType,
+            startDate = params.startDate,
+            endDate = params.endDate,
+            minAmount = params.minAmount,
+            maxAmount = params.maxAmount,
+            actor = params.actor
+        ).map { list ->
+            val sort = SortType.valueOf(params.sortType)
+            when (sort) {
+                SortType.DATE_DESC -> list.sortedByDescending { it.transaction.timestamp }
+                SortType.DATE_ASC -> list.sortedBy { it.transaction.timestamp }
+                SortType.AMOUNT_DESC -> list.sortedByDescending { Math.abs(it.transaction.amount) }
+                SortType.AMOUNT_ASC -> list.sortedBy { Math.abs(it.transaction.amount) }
+                SortType.ALPHABETICAL -> list.sortedBy { it.transaction.partyName }
             }
         }
-
-        filteredList = when (filter) {
-            TransactionFilter.INCOME -> filteredList.filter { it.transaction.type in listOf("Received", "Deposit") }
-            TransactionFilter.EXPENSE -> filteredList.filter { it.transaction.type !in listOf("Received", "Deposit") }
-            TransactionFilter.UNCATEGORIZED -> filteredList.filter { it.category?.name?.equals("Uncategorized", ignoreCase = true) == true || it.transaction.categoryId == null }
-            else -> filteredList
-        }
-
-        dateRange?.let { (start, end) ->
-            filteredList = filteredList.filter { it.transaction.timestamp in start..end }
-        }
-
-        min?.let { minValue ->
-            filteredList = filteredList.filter { Math.abs(it.transaction.amount) >= minValue }
-        }
-
-        max?.let { maxValue ->
-            filteredList = filteredList.filter { Math.abs(it.transaction.amount) <= maxValue }
-        }
-
-        actor?.let { actorValue ->
-            filteredList = filteredList.filter { it.transaction.partyName == actorValue }
-        }
-
-        // Apply sorting
-        filteredList = when (sort) {
-            SortType.DATE_DESC -> filteredList.sortedByDescending { it.transaction.timestamp }
-            SortType.DATE_ASC -> filteredList.sortedBy { it.transaction.timestamp }
-            SortType.AMOUNT_DESC -> filteredList.sortedByDescending { Math.abs(it.transaction.amount) }
-            SortType.AMOUNT_ASC -> filteredList.sortedBy { Math.abs(it.transaction.amount) }
-            SortType.ALPHABETICAL -> filteredList.sortedBy { it.transaction.partyName }
-        }
-
-        filteredList
     }.asLiveData()
 
     fun setSortType(sort: SortType) {

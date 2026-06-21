@@ -41,6 +41,26 @@ class TransactionRepository(
     val transactionsWithCategory: Flow<List<TransactionWithCategory>> =
         transactionDao.getTransactionsWithCategory()
 
+    fun getFilteredTransactionsWithCategory(
+        query: String?,
+        startDate: Long?,
+        endDate: Long?,
+        minAmount: Double?,
+        maxAmount: Double?,
+        actor: String?,
+        filterType: String
+    ): Flow<List<TransactionWithCategory>> {
+        return transactionDao.getFilteredTransactionsWithCategory(
+            query = query,
+            startDate = startDate,
+            endDate = endDate,
+            minAmount = minAmount,
+            maxAmount = maxAmount,
+            actor = actor,
+            filterType = filterType
+        )
+    }
+
     val allTransactions: Flow<List<TransactionEntity>> =
         transactionDao.getAllTransactions()
 

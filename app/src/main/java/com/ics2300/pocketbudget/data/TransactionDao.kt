@@ -14,6 +14,36 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
     fun getTransactionsWithCategory(): Flow<List<TransactionWithCategory>>
 
+    @Transaction
+    @Query(
+        """
+        SELECT transactions.* FROM transactions
+        LEFT JOIN categories ON transactions.categoryId = categories.id
+        WHERE (:query IS NULL OR :query = '' OR transactions.partyName LIKE '%' || :query || '%' OR transactions.fullSmsBody LIKE '%' || :query || '%' OR categories.name LIKE '%' || :query || '%')
+        AND (:startDate IS NULL OR transactions.timestamp >= :startDate)
+        AND (:endDate IS NULL OR transactions.timestamp <= :endDate)
+        AND (:minAmount IS NULL OR ABS(transactions.amount) >= :minAmount)
+        AND (:maxAmount IS NULL OR ABS(transactions.amount) <= :maxAmount)
+        AND (:actor IS NULL OR transactions.partyName = :actor)
+        AND (
+            :filterType = 'ALL' 
+            OR (:filterType = 'INCOME' AND (transactions.type IN ('Received', 'Deposit')))
+            OR (:filterType = 'EXPENSE' AND (transactions.type NOT IN ('Received', 'Deposit')))
+            OR (:filterType = 'UNCATEGORIZED' AND (transactions.categoryId IS NULL OR categories.name = 'Uncategorized'))
+        )
+        ORDER BY transactions.timestamp DESC
+        """
+    )
+    fun getFilteredTransactionsWithCategory(
+        query: String?,
+        startDate: Long?,
+        endDate: Long?,
+        minAmount: Double?,
+        maxAmount: Double?,
+        actor: String?,
+        filterType: String
+    ): Flow<List<TransactionWithCategory>>
+
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
     fun getAllTransactions(): Flow<List<TransactionEntity>>
 
