@@ -49,6 +49,7 @@ object AppModule {
             db.execSQL("ALTER TABLE `notifications` ADD COLUMN `originalMessage` TEXT")
             db.execSQL("ALTER TABLE `notifications` ADD COLUMN `balanceAfter` REAL")
             db.execSQL("ALTER TABLE `notifications` ADD COLUMN `transactionCost` REAL")
+            db.execSQL("ALTER TABLE `notifications` ADD COLUMN `actionData` TEXT")
         }
     }
 
@@ -86,10 +87,11 @@ object AppModule {
     @Singleton
     fun provideTransactionRepository(
         @ApplicationContext context: Context,
+        appDatabase: AppDatabase,
         transactionDao: TransactionDao,
         smsReader: SmsReader
     ): TransactionRepository {
-        return TransactionRepository(context, transactionDao, smsReader)
+        return TransactionRepository(context, appDatabase, transactionDao, smsReader)
     }
 
     @Provides

@@ -91,7 +91,14 @@ class DashboardFragment : Fragment() {
                         "Found ${result.count} new transactions" 
                     else 
                         "All transactions are up to date"
-                    Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG).show()
+                    
+                    val snackbar = Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
+                    activity?.findViewById<View>(R.id.bottom_navigation)?.let { bottomNav ->
+                        if (bottomNav.visibility == View.VISIBLE) {
+                            snackbar.anchorView = bottomNav
+                        }
+                    }
+                    snackbar.show()
                 }
                 is SyncResult.Error -> {
                     Toast.makeText(context, "Sync failed: ${result.message}", Toast.LENGTH_SHORT).show()

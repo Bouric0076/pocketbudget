@@ -12,9 +12,16 @@ import com.google.android.material.button.MaterialButton
 import com.ics2300.pocketbudget.utils.AutoStartHelper
 
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.ics2300.pocketbudget.data.NotificationRepository
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
+
+    @Inject lateinit var notificationRepository: NotificationRepository
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -25,7 +32,9 @@ class MainActivity : AppCompatActivity() {
         val bottomNavigationView = findViewById<BottomNavigationView>(R.id.bottom_navigation)
         
         bottomNavigationView.setupWithNavController(navController)
-        handleNavigationIntent(intent, navController)
+        bottomNavigationView.post {
+            handleNavigationIntent(intent, navController)
+        }
         
         // Prompt for Auto-Start on supported devices (Tecno, Xiaomi, etc.)
         if (AutoStartHelper.isAutoStartPermissionAvailable(this) && !AutoStartHelper.hasPrompted(this)) {
@@ -53,6 +62,12 @@ class MainActivity : AppCompatActivity() {
 
         when (target) {
             "notifications" -> {
+                val notificationId = intent.getIntExtra("notification_id", -1)
+                if (notificationId != -1) {
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        notificationRepository.markAsRead(notificationId)
+                    }
+                }
                 navController.navigate(R.id.notificationsFragment)
             }
 

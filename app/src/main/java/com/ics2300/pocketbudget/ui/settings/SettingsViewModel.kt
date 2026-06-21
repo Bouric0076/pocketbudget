@@ -116,7 +116,7 @@ class SettingsViewModel(
 
     fun importData(context: Context, uri: Uri) {
         viewModelScope.launch {
-            _syncStatus.value = SyncResult.Loading
+            _syncStatus.postValue(SyncResult.Loading)
 
             try {
                 val categories = repository.getAllCategoriesList()
@@ -127,18 +127,21 @@ class SettingsViewModel(
 
                     if (transactions.isNotEmpty()) {
                         val importedCount = repository.importData(transactions)
-                        _syncStatus.value = SyncResult.Success(importedCount)
+                        _syncStatus.postValue(SyncResult.Success(importedCount))
                     } else {
-                        _syncStatus.value =
+                        _syncStatus.postValue(
                             SyncResult.Error("No valid transactions found in file")
+                        )
                     }
                 } else {
-                    _syncStatus.value =
+                    _syncStatus.postValue(
                         SyncResult.Error(result.exceptionOrNull()?.message ?: "Import failed")
+                    )
                 }
             } catch (e: Exception) {
-                _syncStatus.value =
+                _syncStatus.postValue(
                     SyncResult.Error(e.message ?: "Unknown import error")
+                )
             }
         }
     }
@@ -161,16 +164,18 @@ class SettingsViewModel(
                         )
                     )
 
-                _categoryActionStatus.value =
+                _categoryActionStatus.postValue(
                     CategoryActionResult.Success(
                         action = CategoryAction.Added,
                         recategorizedCount = recategorizedCount
                     )
+                )
             } catch (e: Exception) {
-                _categoryActionStatus.value =
+                _categoryActionStatus.postValue(
                     CategoryActionResult.Error(
                         e.message ?: "Failed to add category"
                     )
+                )
             }
         }
     }
@@ -180,16 +185,18 @@ class SettingsViewModel(
             try {
                 val recategorizedCount = repository.updateCategory(category)
 
-                _categoryActionStatus.value =
+                _categoryActionStatus.postValue(
                     CategoryActionResult.Success(
                         action = CategoryAction.Updated,
                         recategorizedCount = recategorizedCount
                     )
+                )
             } catch (e: Exception) {
-                _categoryActionStatus.value =
+                _categoryActionStatus.postValue(
                     CategoryActionResult.Error(
                         e.message ?: "Failed to update category"
                     )
+                )
             }
         }
     }
@@ -198,22 +205,24 @@ class SettingsViewModel(
         viewModelScope.launch {
             try {
                 repository.deleteCategory(categoryId)
-                _categoryActionStatus.value =
+                _categoryActionStatus.postValue(
                     CategoryActionResult.Success(
                         action = CategoryAction.Deleted,
                         recategorizedCount = 0
                     )
+                )
             } catch (e: Exception) {
-                _categoryActionStatus.value =
+                _categoryActionStatus.postValue(
                     CategoryActionResult.Error(
                         e.message ?: "Failed to delete category"
                     )
+                )
             }
         }
     }
 
     fun clearCategoryActionStatus() {
-        _categoryActionStatus.value = CategoryActionResult.Idle
+        _categoryActionStatus.postValue(CategoryActionResult.Idle)
     }
 
     sealed class CategoryActionResult {
@@ -241,14 +250,15 @@ class SettingsViewModel(
 
     fun resyncData() {
         viewModelScope.launch {
-            _syncStatus.value = SyncResult.Loading
+            _syncStatus.postValue(SyncResult.Loading)
 
             try {
                 val count = repository.resyncAllTransactions()
-                _syncStatus.value = SyncResult.Success(count)
+                _syncStatus.postValue(SyncResult.Success(count))
             } catch (e: Exception) {
-                _syncStatus.value =
+                _syncStatus.postValue(
                     SyncResult.Error(e.message ?: "Unknown sync error")
+                )
             }
         }
     }

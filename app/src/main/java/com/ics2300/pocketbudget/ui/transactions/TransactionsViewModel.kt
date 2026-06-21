@@ -56,8 +56,8 @@ class TransactionsViewModel @Inject constructor(private val repository: Transact
         }
 
         filteredList = when (filter) {
-            TransactionFilter.INCOME -> filteredList.filter { it.transaction.amount > 0 }
-            TransactionFilter.EXPENSE -> filteredList.filter { it.transaction.amount < 0 }
+            TransactionFilter.INCOME -> filteredList.filter { it.transaction.type in listOf("Received", "Deposit") }
+            TransactionFilter.EXPENSE -> filteredList.filter { it.transaction.type !in listOf("Received", "Deposit") }
             TransactionFilter.UNCATEGORIZED -> filteredList.filter { it.category?.name?.equals("Uncategorized", ignoreCase = true) == true || it.transaction.categoryId == null }
             else -> filteredList
         }

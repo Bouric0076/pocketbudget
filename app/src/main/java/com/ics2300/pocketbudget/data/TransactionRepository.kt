@@ -16,8 +16,11 @@ import java.util.Calendar
 import java.util.Locale
 import kotlin.math.abs
 
+import androidx.room.withTransaction
+
 class TransactionRepository(
     private val context: Context,
+    private val appDatabase: AppDatabase,
     private val transactionDao: TransactionDao,
     private val smsReader: SmsReader
 ) {
@@ -296,17 +299,19 @@ class TransactionRepository(
                 return@withContext
             }
 
-            transactionDao.reassignTransactionsCategory(
-                oldCategoryId = categoryId,
-                newCategoryId = uncategorizedCategory.id
-            )
-            transactionDao.reassignRecurringTransactionsCategory(
-                oldCategoryId = categoryId,
-                newCategoryId = uncategorizedCategory.id
-            )
-            transactionDao.deleteBudgetsForCategory(categoryId)
-            transactionDao.deleteActorMappingsForCategory(categoryId)
-            transactionDao.deleteCategory(categoryId)
+            appDatabase.withTransaction {
+                transactionDao.reassignTransactionsCategory(
+                    oldCategoryId = categoryId,
+                    newCategoryId = uncategorizedCategory.id
+                )
+                transactionDao.reassignRecurringTransactionsCategory(
+                    oldCategoryId = categoryId,
+                    newCategoryId = uncategorizedCategory.id
+                )
+                transactionDao.deleteBudgetsForCategory(categoryId)
+                transactionDao.deleteActorMappingsForCategory(categoryId)
+                transactionDao.deleteCategory(categoryId)
+            }
             cachedCategories = null
         }
     }
