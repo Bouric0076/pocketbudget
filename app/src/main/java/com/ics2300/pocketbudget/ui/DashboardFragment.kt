@@ -400,12 +400,31 @@ class DashboardFragment : Fragment() {
     }
 
     private fun showPermissionRationaleDialog() {
-        showActionSheet(
-            title = "Allow automatic tracking",
-            message = "PocketBudget needs SMS access to read M-Pesa messages and notification permission for alerts. You can still add transactions manually.",
-            primary = "Grant permissions",
-            secondary = "Not now",
-            onPrimary = {
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_action_prompt, null)
+        
+        view.findViewById<android.widget.TextView>(R.id.text_prompt_title).text = "Allow automatic tracking"
+        view.findViewById<android.widget.TextView>(R.id.text_prompt_message).text = 
+            "PocketBudget needs SMS access to read M-Pesa messages and notification permission for alerts. You can still add transactions manually."
+        
+        val linearLayout = view as android.widget.LinearLayout
+        val composeView = androidx.compose.ui.platform.ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                PermissionExplanationVisuals(
+                    accentColor = androidx.compose.ui.graphics.Color(
+                        androidx.core.content.ContextCompat.getColor(requireContext(), R.color.brand_indigo)
+                    )
+                )
+            }
+        }
+        
+        linearLayout.addView(composeView, 3)
+
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_prompt_primary).apply {
+            text = "Grant permissions"
+            setOnClickListener {
+                dialog.dismiss()
                 val permissions = mutableListOf(
                     android.Manifest.permission.READ_SMS, 
                     android.Manifest.permission.RECEIVE_SMS
@@ -415,7 +434,13 @@ class DashboardFragment : Fragment() {
                 }
                 requestPermissionsLauncher.launch(permissions.toTypedArray())
             }
-        )
+        }
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_prompt_secondary).apply {
+            text = "Not now"
+            setOnClickListener { dialog.dismiss() }
+        }
+        dialog.setContentView(view)
+        dialog.show()
     }
 
     private fun showSettingsDialog() {

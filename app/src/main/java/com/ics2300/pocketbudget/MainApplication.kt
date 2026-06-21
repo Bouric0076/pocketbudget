@@ -11,12 +11,14 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.ics2300.pocketbudget.data.NotificationRepository
 import com.ics2300.pocketbudget.data.TransactionRepository
+import com.ics2300.pocketbudget.BuildConfig
 import com.ics2300.pocketbudget.ui.AppLockActivity
 import com.ics2300.pocketbudget.utils.AppLockManager
 import com.ics2300.pocketbudget.utils.NotificationHelper
 import com.ics2300.pocketbudget.utils.SecurityUtils
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.MainScope
+import timber.log.Timber
 import java.util.Calendar
 import java.util.Collections
 import java.util.WeakHashMap
@@ -44,12 +46,19 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
     override fun onCreate() {
         super.onCreate()
 
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree())
+        } else {
+            Timber.plant(ReleaseTree())
+        }
+
         NotificationHelper.createNotificationChannels(this)
 
         scheduleDailySummary()
         scheduleRecurringTaskCheck()
         scheduleBillReminders()
         scheduleBudgetWatcher()
+        scheduleSmsSync()
 
         registerActivityLifecycleCallbacks(this)
         repository.startSmsListener(applicationScope)
@@ -227,5 +236,44 @@ class MainApplication : Application(), Application.ActivityLifecycleCallbacks {
             ExistingPeriodicWorkPolicy.UPDATE,
             budgetWorkRequest
         )
+    }
+
+    private fun scheduleSmsSync() {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val smsSyncWorkRequest =
+            PeriodicWorkRequestBuilder<com.ics2300.pocketbudget.workers.SmsSyncWorker>(
+                6,
+                TimeUnit.HOURS
+            )
+                .setConstraints(constraints)
+                .addTag("sms_sync")
+                .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "sms_sync",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            smsSyncWorkRequest
+        )
+    }
+}
+
+class ReleaseTree : Timber.Tree() {
+    override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
+        if (priority >= android.util.Log.INFO) {
+            val sanitizedMessage = sanitizeLogMessage(message)
+            android.util.Log.println(priority, tag ?: "PocketBudget", sanitizedMessage)
+        }
+    }
+
+    private fun sanitizeLogMessage(message: String): String {
+        var clean = message
+        clean = clean.replace(Regex("\\b[A-Z0-9]{10}\\b"), "[TX_ID]")
+        clean = clean.replace(Regex("Ksh\\s*[\\d,]+\\.\\d{2}", RegexOption.IGNORE_CASE), "Ksh [AMOUNT]")
+        clean = clean.replace(Regex("Ksh\\s*[\\d,]+", RegexOption.IGNORE_CASE), "Ksh [AMOUNT]")
+        clean = clean.replace(Regex("\\+?\\d{10,12}"), "[PHONE]")
+        return clean
     }
 }

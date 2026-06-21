@@ -89,20 +89,30 @@ object CsvImporter {
     suspend fun importTransactions(
         context: Context,
         uri: Uri,
-        categories: List<CategoryEntity> = emptyList()
+        categories: List<CategoryEntity> = emptyList(),
+        password: String? = null
     ): Result<List<TransactionEntity>> {
         return withContext(Dispatchers.IO) {
             val transactions = mutableListOf<TransactionEntity>()
             try {
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                        transactions.addAll(
-                            parseTransactions(
-                                reader.lineSequence(),
-                                categories
-                            )
+                val inputStream = context.contentResolver.openInputStream(uri) 
+                    ?: throw Exception("Could not open input stream for URI: $uri")
+                val fileBytes = inputStream.use { it.readBytes() }
+
+                val finalBytes = if (!password.isNullOrEmpty()) {
+                    EncryptionUtils.decrypt(fileBytes, password.toCharArray())
+                } else {
+                    fileBytes
+                }
+
+                val decryptedStream = java.io.ByteArrayInputStream(finalBytes)
+                BufferedReader(InputStreamReader(decryptedStream)).use { reader ->
+                    transactions.addAll(
+                        parseTransactions(
+                            reader.lineSequence(),
+                            categories
                         )
-                    }
+                    )
                 }
                 Result.success(transactions)
             } catch (e: Exception) {

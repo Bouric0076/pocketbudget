@@ -31,7 +31,7 @@ class SettingsViewModel(
     private val _categoryActionStatus = MutableLiveData<CategoryActionResult>()
     val categoryActionStatus: LiveData<CategoryActionResult> = _categoryActionStatus
 
-    fun exportData(context: Context, uri: Uri) {
+    fun exportData(context: Context, uri: Uri, password: String? = null) {
         viewModelScope.launch {
             try {
                 val transactions = repository.allTransactions.first()
@@ -40,7 +40,8 @@ class SettingsViewModel(
                     context,
                     uri,
                     transactions,
-                    categories
+                    categories,
+                    password
                 )
 
                 if (result.isSuccess) {
@@ -66,7 +67,8 @@ class SettingsViewModel(
         context: Context,
         uri: Uri,
         startDate: Long? = null,
-        endDate: Long? = null
+        endDate: Long? = null,
+        password: String? = null
     ) {
         viewModelScope.launch {
             try {
@@ -92,7 +94,8 @@ class SettingsViewModel(
                     uri,
                     transactions,
                     categories,
-                    reportPeriod
+                    reportPeriod,
+                    password
                 )
 
                 if (result.isSuccess) {
@@ -114,13 +117,13 @@ class SettingsViewModel(
         }
     }
 
-    fun importData(context: Context, uri: Uri) {
+    fun importData(context: Context, uri: Uri, password: String? = null) {
         viewModelScope.launch {
             _syncStatus.postValue(SyncResult.Loading)
 
             try {
                 val categories = repository.getAllCategoriesList()
-                val result = CsvImporter.importTransactions(context, uri, categories)
+                val result = CsvImporter.importTransactions(context, uri, categories, password)
 
                 if (result.isSuccess) {
                     val transactions = result.getOrNull().orEmpty()

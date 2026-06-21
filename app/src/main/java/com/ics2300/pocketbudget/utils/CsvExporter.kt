@@ -18,39 +18,51 @@ object CsvExporter {
         context: Context,
         uri: Uri,
         transactions: List<TransactionEntity>,
-        categories: List<CategoryEntity> = emptyList()
+        categories: List<CategoryEntity> = emptyList(),
+        password: String? = null
     ): Result<Boolean> {
         return withContext(Dispatchers.IO) {
             try {
-                val outputStream = context.contentResolver.openOutputStream(uri) ?: throw Exception("Could not open output stream for URI: $uri")
+                val byteStream = java.io.ByteArrayOutputStream()
+                BufferedWriter(OutputStreamWriter(byteStream)).use { writer ->
+                    // Write Header
+                    writer.write("ID,Date,Amount,Type,Party,CategoryId,CategoryName\n")
+
+                    val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    val categoryNamesById =
+                        categories.associate { it.id to it.name }
+
+                    // Write Rows
+                    for (t in transactions) {
+                        val categoryName =
+                            t.categoryId?.let { categoryNamesById[it] }.orEmpty()
+
+                        val line = StringBuilder()
+                        // Escape transaction ID as it might contain commas
+                        line.append("${escapeCsv(t.transactionId)},")
+                        line.append("${dateFormat.format(Date(t.timestamp))},")
+                        line.append("${t.amount},")
+                        line.append("${escapeCsv(t.type)},")
+                        line.append("${escapeCsv(t.partyName)},")
+                        line.append("${t.categoryId ?: ""},")
+                        line.append("${escapeCsv(categoryName)}\n")
+                        
+                        writer.write(line.toString())
+                    }
+                }
+
+                val originalBytes = byteStream.toByteArray()
+                val finalBytes = if (!password.isNullOrEmpty()) {
+                    EncryptionUtils.encrypt(originalBytes, password.toCharArray())
+                } else {
+                    originalBytes
+                }
+
+                val outputStream = context.contentResolver.openOutputStream(uri) 
+                    ?: throw Exception("Could not open output stream for URI: $uri")
 
                 outputStream.use { stream ->
-                    BufferedWriter(OutputStreamWriter(stream)).use { writer ->
-                        // Write Header
-                        writer.write("ID,Date,Amount,Type,Party,CategoryId,CategoryName\n")
-
-                        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                        val categoryNamesById =
-                            categories.associate { it.id to it.name }
-
-                        // Write Rows
-                        for (t in transactions) {
-                            val categoryName =
-                                t.categoryId?.let { categoryNamesById[it] }.orEmpty()
-
-                            val line = StringBuilder()
-                            // Escape transaction ID as it might contain commas
-                            line.append("${escapeCsv(t.transactionId)},")
-                            line.append("${dateFormat.format(Date(t.timestamp))},")
-                            line.append("${t.amount},")
-                            line.append("${escapeCsv(t.type)},")
-                            line.append("${escapeCsv(t.partyName)},")
-                            line.append("${t.categoryId ?: ""},")
-                            line.append("${escapeCsv(categoryName)}\n")
-                            
-                            writer.write(line.toString())
-                        }
-                    }
+                    stream.write(finalBytes)
                 }
                 Result.success(true)
             } catch (e: Exception) {

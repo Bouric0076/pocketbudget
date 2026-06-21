@@ -77,10 +77,12 @@ class SettingsFragment : Fragment() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == android.app.Activity.RESULT_OK) {
                 result.data?.data?.let { uri ->
-                    if (exportType == "csv") {
-                        viewModel.exportData(requireContext(), uri)
-                    } else {
-                        viewModel.exportPdf(requireContext(), uri, exportStartDate, exportEndDate)
+                    showPasswordOptionDialog { password ->
+                        if (exportType == "csv") {
+                            viewModel.exportData(requireContext(), uri, password)
+                        } else {
+                            viewModel.exportPdf(requireContext(), uri, exportStartDate, exportEndDate, password)
+                        }
                     }
                 }
             }
@@ -90,12 +92,14 @@ class SettingsFragment : Fragment() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == android.app.Activity.RESULT_OK) {
                 result.data?.data?.let { uri ->
-                    showConfirmationDialog(
-                        "Import Data",
-                        "This will add transactions from the selected CSV file. Existing duplicate transactions will be skipped. Continue?"
-                    ) {
-                        viewModel.importData(requireContext(), uri)
-                        Toast.makeText(context, "Import started...", Toast.LENGTH_SHORT).show()
+                    showImportPasswordPromptDialog { password ->
+                        showConfirmationDialog(
+                            "Import Data",
+                            "This will add transactions from the selected CSV file. Existing duplicate transactions will be skipped. Continue?"
+                        ) {
+                            viewModel.importData(requireContext(), uri, password)
+                            Toast.makeText(context, "Import started...", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             }
@@ -894,6 +898,77 @@ class SettingsFragment : Fragment() {
 
         dialog.setContentView(view)
         dialog.show()
+    }
+
+    private fun showPasswordOptionDialog(onDone: (String?) -> Unit) {
+        val options = listOf("No, export plaintext (standard)", "Yes, encrypt with password")
+        showOptionPicker("Protect exported file?", options) { which ->
+            if (which == 1) {
+                showPasswordInputDialog(
+                    "Set Export Password",
+                    "Enter a password to encrypt your exported file. You will need this password to import it back."
+                ) { password ->
+                    if (password.isNullOrEmpty()) {
+                        Toast.makeText(context, "Password cannot be empty", Toast.LENGTH_SHORT).show()
+                    } else {
+                        onDone(password)
+                    }
+                }
+            } else {
+                onDone(null)
+            }
+        }
+    }
+
+    private fun showImportPasswordPromptDialog(onDone: (String?) -> Unit) {
+        val options = listOf("No, import standard file", "Yes, file is password-encrypted")
+        showOptionPicker("Is the import file encrypted?", options) { which ->
+            if (which == 1) {
+                showPasswordInputDialog(
+                    "Enter Import Password",
+                    "Enter the password used to encrypt this file during export."
+                ) { password ->
+                    if (password.isNullOrEmpty()) {
+                        Toast.makeText(context, "Password cannot be empty", Toast.LENGTH_SHORT).show()
+                    } else {
+                        onDone(password)
+                    }
+                }
+            } else {
+                onDone(null)
+            }
+        }
+    }
+
+    private fun showPasswordInputDialog(
+        title: String,
+        message: String,
+        onPasswordEntered: (String?) -> Unit
+    ) {
+        val context = requireContext()
+        val input = android.widget.EditText(context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            hint = "Password"
+        }
+        
+        val container = android.widget.FrameLayout(context).apply {
+            val padding = (resources.displayMetrics.density * 24).toInt()
+            setPadding(padding, 8, padding, 8)
+            addView(input)
+        }
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
+            .setTitle(title)
+            .setMessage(message)
+            .setView(container)
+            .setPositiveButton("Submit") { dialog, _ ->
+                dialog.dismiss()
+                onPasswordEntered(input.text.toString())
+            }
+            .setNegativeButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
     }
 
     override fun onDestroyView() {

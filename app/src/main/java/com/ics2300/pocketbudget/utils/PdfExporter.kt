@@ -37,7 +37,8 @@ object PdfExporter {
         uri: Uri,
         transactions: List<TransactionEntity>,
         categories: List<CategoryEntity>,
-        reportPeriod: String = "All Time"
+        reportPeriod: String = "All Time",
+        password: String? = null
     ): Result<Boolean> {
         return withContext(Dispatchers.IO) {
             val pdfDocument = PdfDocument()
@@ -111,13 +112,25 @@ object PdfExporter {
                 pdfDocument.finishPage(page)
 
                 // Write to file
+                val byteStream = java.io.ByteArrayOutputStream()
+                byteStream.use { stream ->
+                    pdfDocument.writeTo(stream)
+                }
+
+                val originalBytes = byteStream.toByteArray()
+                val finalBytes = if (!password.isNullOrEmpty()) {
+                    EncryptionUtils.encrypt(originalBytes, password.toCharArray())
+                } else {
+                    originalBytes
+                }
+
                 val outputStream = context.contentResolver.openOutputStream(uri)
                 if (outputStream == null) {
                     throw Exception("Could not open output stream for URI: $uri")
                 }
 
                 outputStream.use { stream ->
-                    pdfDocument.writeTo(stream)
+                    stream.write(finalBytes)
                 }
                 
                 Result.success(true)
