@@ -56,13 +56,117 @@ object AppModule {
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
+        net.sqlcipher.database.SQLiteDatabase.loadLibs(context)
+        val dbFile = context.getDatabasePath("pocket-budget-database")
+        val passphrase = getOrCreateDbPassphrase(context)
+
+        if (dbFile.exists()) {
+            encryptExistingDatabaseIfNecessary(context, dbFile, passphrase)
+        }
+
+        val factory = net.sqlcipher.database.SupportFactory(passphrase)
+
         return Room.databaseBuilder(
             context,
             AppDatabase::class.java,
             "pocket-budget-database"
         )
+            .openHelperFactory(factory)
             .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
             .build()
+    }
+
+    private fun getOrCreateDbPassphrase(context: Context): ByteArray {
+        return try {
+            val masterKey = androidx.security.crypto.MasterKey.Builder(context.applicationContext)
+                .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
+                .build()
+
+            val securePrefs = androidx.security.crypto.EncryptedSharedPreferences.create(
+                context.applicationContext,
+                "secure_prefs",
+                masterKey,
+                androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+
+            val keyName = "db_passphrase_key"
+            val storedKey = securePrefs.getString(keyName, null)
+            if (storedKey != null) {
+                android.util.Base64.decode(storedKey, android.util.Base64.NO_WRAP)
+            } else {
+                val key = ByteArray(32)
+                java.security.SecureRandom().nextBytes(key)
+                val encodedKey = android.util.Base64.encodeToString(key, android.util.Base64.NO_WRAP)
+                securePrefs.edit().putString(keyName, encodedKey).apply()
+                key
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AppModule", "EncryptedSharedPreferences failed, falling back to static key", e)
+            "pocketbudget_fallback_key_2026_06".toByteArray(Charsets.UTF_8)
+        }
+    }
+
+    private fun encryptExistingDatabaseIfNecessary(
+        context: Context,
+        dbFile: java.io.File,
+        passphrase: ByteArray
+    ) {
+        var isEncrypted = false
+        try {
+            val db = android.database.sqlite.SQLiteDatabase.openDatabase(
+                dbFile.absolutePath,
+                null,
+                android.database.sqlite.SQLiteDatabase.OPEN_READONLY
+            )
+            db.close()
+            isEncrypted = false
+        } catch (e: Exception) {
+            isEncrypted = true
+        }
+
+        if (!isEncrypted) {
+            android.util.Log.i("AppModule", "Existing database is unencrypted. Encrypting now...")
+            val tempFile = java.io.File(dbFile.parent, dbFile.name + ".tmp")
+            if (tempFile.exists()) tempFile.delete()
+
+            try {
+                net.sqlcipher.database.SQLiteDatabase.loadLibs(context)
+
+                val unencryptedDb = net.sqlcipher.database.SQLiteDatabase.openDatabase(
+                    dbFile.absolutePath,
+                    "",
+                    null,
+                    net.sqlcipher.database.SQLiteDatabase.OPEN_READWRITE
+                )
+
+                val hexPassphrase = toHex(passphrase)
+                unencryptedDb.rawExecSQL("ATTACH DATABASE '${tempFile.absolutePath}' AS encrypted KEY x'$hexPassphrase'")
+                unencryptedDb.rawExecSQL("SELECT sqlcipher_export('encrypted')")
+                unencryptedDb.rawExecSQL("DETACH DATABASE encrypted")
+                unencryptedDb.close()
+
+                if (dbFile.delete()) {
+                    tempFile.renameTo(dbFile)
+                    android.util.Log.i("AppModule", "Database successfully encrypted!")
+                } else {
+                    android.util.Log.e("AppModule", "Failed to delete old unencrypted database.")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AppModule", "Encryption migration failed.", e)
+            }
+        }
+    }
+
+    private fun toHex(bytes: ByteArray): String {
+        val hexChars = "0123456789ABCDEF".toCharArray()
+        val result = StringBuilder(bytes.size * 2)
+        for (b in bytes) {
+            val i = b.toInt() and 0xFF
+            result.append(hexChars[i shr 4])
+            result.append(hexChars[i and 0x0F])
+        }
+        return result.toString()
     }
 
     @Provides

@@ -77,11 +77,17 @@ class SettingsFragment : Fragment() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == android.app.Activity.RESULT_OK) {
                 result.data?.data?.let { uri ->
-                    showPasswordOptionDialog { password ->
-                        if (exportType == "csv") {
-                            viewModel.exportData(requireContext(), uri, password)
-                        } else {
+                    if (exportType == "backup") {
+                        showBackupPasswordOptionDialog { password ->
+                            viewModel.exportBackup(requireContext(), uri, password)
+                        }
+                    } else if (exportType == "pdf") {
+                        showPasswordOptionDialog { password ->
                             viewModel.exportPdf(requireContext(), uri, exportStartDate, exportEndDate, password)
+                        }
+                    } else {
+                        showPasswordOptionDialog { password ->
+                            viewModel.exportData(requireContext(), uri, password)
                         }
                     }
                 }
@@ -92,13 +98,25 @@ class SettingsFragment : Fragment() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == android.app.Activity.RESULT_OK) {
                 result.data?.data?.let { uri ->
-                    showImportPasswordPromptDialog { password ->
-                        showConfirmationDialog(
-                            "Import Data",
-                            "This will add transactions from the selected CSV file. Existing duplicate transactions will be skipped. Continue?"
-                        ) {
-                            viewModel.importData(requireContext(), uri, password)
-                            Toast.makeText(context, "Import started...", Toast.LENGTH_SHORT).show()
+                    if (exportType == "restore") {
+                        showRestorePasswordInputDialog { password ->
+                            showConfirmationDialog(
+                                "Restore Backup",
+                                "This will replace all your current data, categories, budgets, and settings with the data in this backup file. This cannot be undone. Continue?"
+                            ) {
+                                viewModel.importBackup(requireContext(), uri, password)
+                                Toast.makeText(context, "Restore started...", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        showImportPasswordPromptDialog { password ->
+                            showConfirmationDialog(
+                                "Import Data",
+                                "This will add transactions from the selected CSV file. Existing duplicate transactions will be skipped. Continue?"
+                            ) {
+                                viewModel.importData(requireContext(), uri, password)
+                                Toast.makeText(context, "Import started...", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 }
@@ -278,17 +296,24 @@ class SettingsFragment : Fragment() {
                 return@setOnClickListener
             }
 
-            val options = listOf("PDF Report (Recommended)", "CSV (Excel)")
+            val options = listOf("PDF Report (Recommended)", "CSV (Excel)", "Full Encrypted Backup (.pbk)")
             showOptionPicker("Export data", options) { which ->
-                    if (which == 0) {
-                        showDateRangeDialog { dateLabel ->
-                            exportType = "pdf"
-                            launchExportIntent("application/pdf", "PocketBudget_Report_$dateLabel.pdf")
+                    when (which) {
+                        0 -> {
+                            showDateRangeDialog { dateLabel ->
+                                exportType = "pdf"
+                                launchExportIntent("application/pdf", "PocketBudget_Report_$dateLabel.pdf")
+                            }
                         }
-                    } else {
-                        showDateRangeDialog { dateLabel ->
-                            exportType = "csv"
-                            launchExportIntent("text/csv", "PocketBudget_Export_$dateLabel.csv")
+                        1 -> {
+                            showDateRangeDialog { dateLabel ->
+                                exportType = "csv"
+                                launchExportIntent("text/csv", "PocketBudget_Export_$dateLabel.csv")
+                            }
+                        }
+                        2 -> {
+                            exportType = "backup"
+                            launchExportIntent("application/octet-stream", "PocketBudget_Backup_${System.currentTimeMillis()}.pbk")
                         }
                     }
                 }
@@ -300,11 +325,24 @@ class SettingsFragment : Fragment() {
                 return@setOnClickListener
             }
 
-            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "text/csv"
+            val options = listOf("Import Transactions (CSV)", "Restore Full Backup (.pbk)")
+            showOptionPicker("Import / Restore", options) { which ->
+                if (which == 0) {
+                    exportType = "csv"
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "text/csv"
+                    }
+                    openDocumentLauncher.launch(intent)
+                } else {
+                    exportType = "restore"
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                    }
+                    openDocumentLauncher.launch(intent)
+                }
             }
-            openDocumentLauncher.launch(intent)
         }
 
         binding.btnResync.setOnClickListener {
@@ -904,9 +942,14 @@ class SettingsFragment : Fragment() {
         val options = listOf("No, export plaintext (standard)", "Yes, encrypt with password")
         showOptionPicker("Protect exported file?", options) { which ->
             if (which == 1) {
+                val message = if (exportType == "pdf") {
+                    "Enter a password to secure your PDF report. Anyone opening this PDF will be prompted for this password."
+                } else {
+                    "Enter a password to encrypt your exported file. You will need this password to import it back."
+                }
                 showPasswordInputDialog(
                     "Set Export Password",
-                    "Enter a password to encrypt your exported file. You will need this password to import it back."
+                    message
                 ) { password ->
                     if (password.isNullOrEmpty()) {
                         Toast.makeText(context, "Password cannot be empty", Toast.LENGTH_SHORT).show()
@@ -969,6 +1012,32 @@ class SettingsFragment : Fragment() {
                 dialog.dismiss()
             }
             .show()
+    }
+
+    private fun showBackupPasswordOptionDialog(onDone: (String) -> Unit) {
+        showPasswordInputDialog(
+            "Set Backup Password",
+            "Enter a password to encrypt your backup file. You must remember this password to restore your data."
+        ) { password ->
+            if (password.isNullOrEmpty()) {
+                Toast.makeText(context, "Password is required for full backups", Toast.LENGTH_SHORT).show()
+            } else {
+                onDone(password)
+            }
+        }
+    }
+
+    private fun showRestorePasswordInputDialog(onDone: (String) -> Unit) {
+        showPasswordInputDialog(
+            "Enter Backup Password",
+            "Enter the password that was used to encrypt this backup file."
+        ) { password ->
+            if (password.isNullOrEmpty()) {
+                Toast.makeText(context, "Password is required to decrypt backup", Toast.LENGTH_SHORT).show()
+            } else {
+                onDone(password)
+            }
+        }
     }
 
     override fun onDestroyView() {

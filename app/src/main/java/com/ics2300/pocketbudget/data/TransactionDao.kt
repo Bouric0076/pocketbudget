@@ -116,6 +116,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :transactionId")
     suspend fun getTransactionById(transactionId: Int): TransactionEntity?
 
+    @Query("SELECT * FROM transactions WHERE transactionId = :txId LIMIT 1")
+    suspend fun getTransactionByTxId(txId: String): TransactionEntity?
+
     @Query("SELECT * FROM transactions WHERE UPPER(TRIM(partyName)) = :partyName AND categoryId IS NOT NULL")
     suspend fun getCategorizedTransactionsByPartyName(partyName: String): List<TransactionEntity>
 
@@ -151,6 +154,30 @@ interface TransactionDao {
 
     @Query("DELETE FROM budgets")
     suspend fun deleteAllBudgets()
+
+    @Query("DELETE FROM categories")
+    suspend fun deleteAllCategories()
+
+    @Query("DELETE FROM recurring_transactions")
+    suspend fun deleteAllRecurringTransactions()
+
+    @Query("DELETE FROM actor_category_mappings")
+    suspend fun deleteAllActorMappings()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTransactions(transactions: List<TransactionEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCategories(categories: List<CategoryEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBudgets(budgets: List<BudgetEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRecurringTransactions(recurring: List<RecurringTransactionEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertActorMappings(mappings: List<ActorCategoryMapping>)
 
     @Query("DELETE FROM budgets WHERE categoryId = :categoryId")
     suspend fun deleteBudgetsForCategory(categoryId: Int)
@@ -281,6 +308,12 @@ interface TransactionDao {
 
     @Query("SELECT * FROM actor_category_mappings")
     suspend fun getAllActorMappings(): List<ActorCategoryMapping>
+
+    @Query("SELECT * FROM budgets")
+    suspend fun getAllBudgetsList(): List<BudgetEntity>
+
+    @Query("SELECT * FROM recurring_transactions")
+    suspend fun getAllRecurringTransactionsList(): List<RecurringTransactionEntity>
 
     @Query("DELETE FROM actor_category_mappings WHERE categoryId = :categoryId")
     suspend fun deleteActorMappingsForCategory(categoryId: Int)

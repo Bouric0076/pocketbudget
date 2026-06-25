@@ -266,6 +266,53 @@ class SettingsViewModel(
         }
     }
 
+    fun exportBackup(context: Context, uri: Uri, password: String) {
+        viewModelScope.launch {
+            try {
+                val result = repository.exportBackup(uri, password)
+
+                if (result.isSuccess) {
+                    Toast.makeText(context, "Full Backup Successful", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        "Backup Failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    "Error: ${e.message ?: "Unknown error"}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    fun importBackup(context: Context, uri: Uri, password: String) {
+        viewModelScope.launch {
+            _syncStatus.postValue(SyncResult.Loading)
+
+            try {
+                val result = repository.importBackup(uri, password)
+
+                if (result.isSuccess) {
+                    _syncStatus.postValue(SyncResult.Success(0))
+                    Toast.makeText(context, "Restore Successful", Toast.LENGTH_SHORT).show()
+                } else {
+                    _syncStatus.postValue(
+                        SyncResult.Error(result.exceptionOrNull()?.message ?: "Restore failed")
+                    )
+                }
+            } catch (e: Exception) {
+                _syncStatus.postValue(
+                    SyncResult.Error(e.message ?: "Unknown restore error")
+                )
+            }
+        }
+    }
+
     fun processMpesaSms(
         body: String,
         onResult: (com.ics2300.pocketbudget.data.TransactionEntity?) -> Unit

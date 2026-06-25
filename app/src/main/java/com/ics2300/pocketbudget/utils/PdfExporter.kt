@@ -51,14 +51,23 @@ object PdfExporter {
 
                 // Calculate Summary Data
                 val totalIncome = transactions.filter { it.type == "Received" || it.type == "Deposit" }.sumOf { it.amount }
-                val totalExpense = transactions.filter { it.type != "Received" && it.type != "Deposit" }.sumOf { it.amount }
+                val totalExpense = transactions.filter { it.type != "Received" && it.type != "Deposit" }.sumOf { if (it.type == "Reversal") -it.amount else it.amount }
                 val balance = totalIncome - totalExpense
                 
                 // Group Expenses by Category for Chart
                 val expensesByCategory = transactions
                     .filter { it.type != "Received" && it.type != "Deposit" }
                     .groupBy { it.categoryId ?: -1 }
-                    .mapValues { entry -> entry.value.sumOf { it.amount } }
+                    .mapValues { entry -> entry.value.sumOf { if (it.type == "Reversal") -it.amount else it.amount } }
+                    .toList()
+                    .sortedByDescending { it.second }
+                    .take(5) // Top 5
+
+                // Group Expenses by Spender (Actor)
+                val expensesBySpender = transactions
+                    .filter { it.type != "Received" && it.type != "Deposit" }
+                    .groupBy { it.partyName }
+                    .mapValues { entry -> entry.value.sumOf { if (it.type == "Reversal") -it.amount else it.amount } }
                     .toList()
                     .sortedByDescending { it.second }
                     .take(5) // Top 5
@@ -81,6 +90,10 @@ object PdfExporter {
 
                 // Draw Top Categories
                 drawTopCategories(canvas, paint, expensesByCategory, categoryMap, yPosition)
+                yPosition += 160
+
+                // Draw Top Spenders
+                drawTopSpenders(canvas, paint, expensesBySpender, yPosition)
                 yPosition += 160
 
                 // Draw Transaction Table Header
@@ -111,26 +124,37 @@ object PdfExporter {
 
                 pdfDocument.finishPage(page)
 
-                // Write to file
+                // Write native PDF to a temporary byte array
                 val byteStream = java.io.ByteArrayOutputStream()
                 byteStream.use { stream ->
                     pdfDocument.writeTo(stream)
                 }
-
-                val originalBytes = byteStream.toByteArray()
-                val finalBytes = if (!password.isNullOrEmpty()) {
-                    EncryptionUtils.encrypt(originalBytes, password.toCharArray())
-                } else {
-                    originalBytes
-                }
+                val pdfBytes = byteStream.toByteArray()
 
                 val outputStream = context.contentResolver.openOutputStream(uri)
-                if (outputStream == null) {
-                    throw Exception("Could not open output stream for URI: $uri")
-                }
+                    ?: throw Exception("Could not open output stream for URI: $uri")
 
                 outputStream.use { stream ->
-                    stream.write(finalBytes)
+                    if (!password.isNullOrEmpty()) {
+                        // Initialize PDFBox resource loader for Android
+                        com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(context.applicationContext)
+                        
+                        // Load native PDF into PDFBox
+                        val doc = com.tom_roush.pdfbox.pdmodel.PDDocument.load(pdfBytes)
+                        
+                        // Configure Standard PDF Protection
+                        val ap = com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission()
+                        val spp = com.tom_roush.pdfbox.pdmodel.encryption.StandardProtectionPolicy(password, password, ap)
+                        spp.encryptionKeyLength = 128 // Standard 128-bit encryption compatible with all PDF readers
+                        
+                        // Apply protection and save
+                        doc.protect(spp)
+                        doc.save(stream)
+                        doc.close()
+                    } else {
+                        // Write standard unencrypted PDF bytes directly
+                        stream.write(pdfBytes)
+                    }
                 }
                 
                 Result.success(true)
@@ -226,6 +250,43 @@ object PdfExporter {
             if (maxAmount > 0) {
                 barWidth = (amount / maxAmount * barMaxWidth).toFloat()
                 paint.color = COLOR_ACCENT
+                canvas.drawRect(MARGIN + 100f, y, MARGIN + 100f + barWidth, y + 15, paint)
+            }
+
+            // Amount
+            paint.color = COLOR_TEXT_PRIMARY
+            canvas.drawText(CurrencyFormatter.formatKsh(amount), MARGIN + 100f + barWidth + 10, y + 12, paint)
+
+            y += 25
+        }
+    }
+
+    private fun drawTopSpenders(canvas: Canvas, paint: Paint, spenders: List<Pair<String, Double>>, startY: Int) {
+        paint.color = COLOR_TEXT_PRIMARY
+        paint.textSize = 14f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textAlign = Paint.Align.LEFT
+        canvas.drawText("Top Spending Recipients", MARGIN.toFloat(), startY.toFloat(), paint)
+
+        var y = startY + 20f
+        val maxAmount = spenders.maxOfOrNull { it.second } ?: 1.0
+        val barMaxWidth = PAGE_WIDTH - (MARGIN * 2) - 150f // Leave space for text
+
+        for ((partyName, amount) in spenders) {
+            // Party Name
+            paint.color = COLOR_TEXT_SECONDARY
+            paint.textSize = 10f
+            paint.typeface = Typeface.DEFAULT
+            
+            var party = partyName
+            if (party.length > 20) party = party.substring(0, 17) + "..."
+            canvas.drawText(party, MARGIN.toFloat(), y + 10, paint)
+
+            // Bar
+            var barWidth = 0f
+            if (maxAmount > 0) {
+                barWidth = (amount / maxAmount * barMaxWidth).toFloat()
+                paint.color = COLOR_BRAND_SECONDARY
                 canvas.drawRect(MARGIN + 100f, y, MARGIN + 100f + barWidth, y + 15, paint)
             }
 

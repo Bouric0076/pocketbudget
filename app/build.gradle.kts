@@ -138,6 +138,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:21.2.0")
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("com.jakewharton.timber:timber:5.0.1")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

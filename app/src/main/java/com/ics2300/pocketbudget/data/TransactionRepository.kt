@@ -1,6 +1,7 @@
 package com.ics2300.pocketbudget.data
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.ics2300.pocketbudget.utils.CategoryUtils
 import com.ics2300.pocketbudget.utils.MpesaParser
@@ -434,6 +435,20 @@ class TransactionRepository(
 
         var matchedCategoryId: Int? = null
 
+        if (transaction.type.equals("Reversal", ignoreCase = true)) {
+            val prefix = "REVERSAL OF "
+            val normalizedPartyName = transaction.partyName.uppercase(Locale.US)
+            if (normalizedPartyName.startsWith(prefix)) {
+                val originalTx = normalizedPartyName.removePrefix(prefix).trim()
+                if (originalTx.isNotBlank()) {
+                    val originalTransaction = transactionDao.getTransactionByTxId(originalTx)
+                    if (originalTransaction != null && originalTransaction.categoryId != null) {
+                        matchedCategoryId = originalTransaction.categoryId
+                    }
+                }
+            }
+        }
+
         val party =
             normalizePartyName(transaction.partyName)
 
@@ -668,6 +683,15 @@ class TransactionRepository(
 
                     if (result != -1L) {
                         importedCount++
+
+                        val normalizedParty = normalizePartyName(transactionToInsert.partyName)
+                        val catId = transactionToInsert.categoryId
+                        val uncategorizedId = categories.find { it.name.equals("Uncategorized", true) }?.id
+                        if (normalizedParty.isNotBlank() && catId != uncategorizedId) {
+                            transactionDao.insertActorMapping(
+                                ActorCategoryMapping(normalizedParty, catId)
+                            )
+                        }
                     }
 
                 } catch (e: Exception) {
@@ -845,5 +869,23 @@ class TransactionRepository(
 
     suspend fun insert(transaction: TransactionEntity) {
         transactionDao.insertTransaction(transaction)
+    }
+
+    suspend fun exportBackup(uri: Uri, password: String): Result<Boolean> {
+        return com.ics2300.pocketbudget.utils.BackupManager.exportBackup(
+            context,
+            uri,
+            appDatabase,
+            password
+        )
+    }
+
+    suspend fun importBackup(uri: Uri, password: String): Result<Boolean> {
+        return com.ics2300.pocketbudget.utils.BackupManager.importBackup(
+            context,
+            uri,
+            appDatabase,
+            password
+        )
     }
 }
