@@ -9,6 +9,11 @@
 # decoder/encoder. This optional library is not packaged by the app.
 -dontwarn com.gemalto.jp2.**
 
+# SQLCipher's native library looks up database bridge fields/methods by their
+# original names while loading libsqlcipher.so. Keep the bridge package intact
+# in minified release builds; otherwise the app aborts in Application.onCreate.
+-keep class net.sqlcipher.** { *; }
+
 # If your project uses WebView with JS, uncomment the following
 # and specify the fully qualified class name to the JavaScript interface
 # class:
