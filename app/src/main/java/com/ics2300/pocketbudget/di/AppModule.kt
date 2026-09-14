@@ -215,18 +215,35 @@ object AppModule {
             try {
                 net.sqlcipher.database.SQLiteDatabase.loadLibs(context)
 
-                val unencryptedDb = net.sqlcipher.database.SQLiteDatabase.openDatabase(
-                    dbFile.absolutePath,
-                    "",
+                // Create the encrypted destination first, then attach the
+                // plaintext source. This avoids relying on ATTACH to create
+                // and initialize a SQLCipher database on Android.
+                val encryptedDb = net.sqlcipher.database.SQLiteDatabase.openDatabase(
+                    tempFile.absolutePath,
+                    passphrase,
                     null,
-                    net.sqlcipher.database.SQLiteDatabase.OPEN_READWRITE
+                    net.sqlcipher.database.SQLiteDatabase.OPEN_READWRITE or
+                        net.sqlcipher.database.SQLiteDatabase.CREATE_IF_NECESSARY,
+                    null,
+                    null
                 )
 
-                val hexPassphrase = toHex(passphrase)
-                unencryptedDb.rawExecSQL("ATTACH DATABASE '${tempFile.absolutePath}' AS encrypted KEY x'$hexPassphrase'")
-                unencryptedDb.rawExecSQL("SELECT sqlcipher_export('encrypted')")
-                unencryptedDb.rawExecSQL("DETACH DATABASE encrypted")
-                unencryptedDb.close()
+                try {
+                    val sourcePath = dbFile.absolutePath.replace("'", "''")
+                    encryptedDb.rawExecSQL("ATTACH DATABASE '$sourcePath' AS plain KEY ''")
+                    val exportCursor = encryptedDb.rawQuery(
+                        "SELECT sqlcipher_export('main', 'plain')",
+                        emptyArray<String>()
+                    )
+                    try {
+                        exportCursor.moveToFirst()
+                    } finally {
+                        exportCursor.close()
+                    }
+                    encryptedDb.rawExecSQL("DETACH DATABASE plain")
+                } finally {
+                    encryptedDb.close()
+                }
 
                 val backupFile = java.io.File(dbFile.parent, dbFile.name + ".unencrypted-backup")
                 if (backupFile.exists()) backupFile.delete()
@@ -246,17 +263,6 @@ object AppModule {
                 android.util.Log.e("AppModule", "Encryption migration failed.", e)
             }
         }
-    }
-
-    private fun toHex(bytes: ByteArray): String {
-        val hexChars = "0123456789ABCDEF".toCharArray()
-        val result = StringBuilder(bytes.size * 2)
-        for (b in bytes) {
-            val i = b.toInt() and 0xFF
-            result.append(hexChars[i shr 4])
-            result.append(hexChars[i and 0x0F])
-        }
-        return result.toString()
     }
 
     @Provides
