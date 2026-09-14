@@ -4,5 +4,7 @@ data class DashboardStats(
     val totalIncome: Double,
     val totalExpense: Double,
     val balance: Double,
-    val transactionCount: Int
+    val transactionCount: Int,
+    val totalSavings: Double = 0.0,
+    val totalTransfers: Double = 0.0
 )

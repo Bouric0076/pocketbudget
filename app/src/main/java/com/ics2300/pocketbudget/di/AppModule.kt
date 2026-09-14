@@ -53,6 +53,23 @@ object AppModule {
         }
     }
 
+    private val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `transactions` ADD COLUMN `cashFlowBucket` TEXT NOT NULL DEFAULT 'EXPENSE'")
+            db.execSQL(
+                """
+                UPDATE transactions
+                SET cashFlowBucket = CASE
+                    WHEN categoryId IN (SELECT id FROM categories WHERE name = 'Savings') THEN 'SAVINGS'
+                    WHEN categoryId IN (SELECT id FROM categories WHERE name = 'Transfer & Cash') THEN 'TRANSFER'
+                    WHEN type IN ('Received', 'Deposit') THEN 'INCOME'
+                    ELSE 'EXPENSE'
+                END
+                """.trimIndent()
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -72,7 +89,7 @@ object AppModule {
             "pocket-budget-database"
         )
             .openHelperFactory(factory)
-            .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .build()
     }
 
@@ -102,8 +119,11 @@ object AppModule {
                 key
             }
         } catch (e: Exception) {
-            android.util.Log.e("AppModule", "EncryptedSharedPreferences failed, falling back to static key", e)
-            "pocketbudget_fallback_key_2026_06".toByteArray(Charsets.UTF_8)
+            android.util.Log.e("AppModule", "Unable to access encrypted database key storage", e)
+            throw IllegalStateException(
+                "Secure database key storage is unavailable; refusing to use an insecure fallback.",
+                e
+            )
         }
     }
 
@@ -146,12 +166,20 @@ object AppModule {
                 unencryptedDb.rawExecSQL("DETACH DATABASE encrypted")
                 unencryptedDb.close()
 
-                if (dbFile.delete()) {
-                    tempFile.renameTo(dbFile)
-                    android.util.Log.i("AppModule", "Database successfully encrypted!")
-                } else {
-                    android.util.Log.e("AppModule", "Failed to delete old unencrypted database.")
+                val backupFile = java.io.File(dbFile.parent, dbFile.name + ".unencrypted-backup")
+                if (backupFile.exists()) backupFile.delete()
+
+                if (!dbFile.renameTo(backupFile)) {
+                    throw java.io.IOException("Could not stage the existing database for encryption")
                 }
+
+                if (!tempFile.renameTo(dbFile)) {
+                    backupFile.renameTo(dbFile)
+                    throw java.io.IOException("Could not install the encrypted database")
+                }
+
+                backupFile.delete()
+                android.util.Log.i("AppModule", "Database successfully encrypted!")
             } catch (e: Exception) {
                 android.util.Log.e("AppModule", "Encryption migration failed.", e)
             }

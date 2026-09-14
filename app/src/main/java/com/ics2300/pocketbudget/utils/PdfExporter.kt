@@ -50,13 +50,17 @@ object PdfExporter {
                 val categoryMap = categories.associate { it.id to it.name }
 
                 // Calculate Summary Data
-                val totalIncome = transactions.filter { it.type == "Received" || it.type == "Deposit" }.sumOf { it.amount }
-                val totalExpense = transactions.filter { it.type != "Received" && it.type != "Deposit" }.sumOf { if (it.type == "Reversal") -it.amount else it.amount }
+                val totalIncome = transactions
+                    .filter { CashFlowClassifier.persistedBucket(it, categoryMap[it.categoryId]) == CashFlowBucket.INCOME }
+                    .sumOf { it.amount }
+                val totalExpense = transactions
+                    .filter { CashFlowClassifier.persistedBucket(it, categoryMap[it.categoryId]) == CashFlowBucket.EXPENSE }
+                    .sumOf { if (it.type == "Reversal") -it.amount else it.amount }
                 val balance = totalIncome - totalExpense
                 
                 // Group Expenses by Category for Chart
                 val expensesByCategory = transactions
-                    .filter { it.type != "Received" && it.type != "Deposit" }
+                    .filter { CashFlowClassifier.persistedBucket(it, categoryMap[it.categoryId]) == CashFlowBucket.EXPENSE }
                     .groupBy { it.categoryId ?: -1 }
                     .mapValues { entry -> entry.value.sumOf { if (it.type == "Reversal") -it.amount else it.amount } }
                     .toList()
@@ -65,7 +69,7 @@ object PdfExporter {
 
                 // Group Expenses by Spender (Actor)
                 val expensesBySpender = transactions
-                    .filter { it.type != "Received" && it.type != "Deposit" }
+                    .filter { CashFlowClassifier.persistedBucket(it, categoryMap[it.categoryId]) == CashFlowBucket.EXPENSE }
                     .groupBy { it.partyName }
                     .mapValues { entry -> entry.value.sumOf { if (it.type == "Reversal") -it.amount else it.amount } }
                     .toList()
@@ -85,7 +89,9 @@ object PdfExporter {
                 yPosition += 80
 
                 // Draw Summary Cards
-                drawSummary(canvas, paint, totalIncome, totalExpense, balance, yPosition)
+                val totalSavings = transactions
+                    .sumOf { CashFlowClassifier.savingsDelta(it, categoryMap[it.categoryId]) }
+                drawSummary(canvas, paint, totalIncome, totalExpense, totalSavings, balance, yPosition)
                 yPosition += 100
 
                 // Draw Top Categories
@@ -192,8 +198,8 @@ object PdfExporter {
         canvas.drawLine(MARGIN.toFloat(), MARGIN + 55f, (PAGE_WIDTH - MARGIN).toFloat(), MARGIN + 55f, paint)
     }
 
-    private fun drawSummary(canvas: Canvas, paint: Paint, income: Double, expense: Double, balance: Double, startY: Int) {
-        val boxWidth = (PAGE_WIDTH - (MARGIN * 2) - 20) / 3
+    private fun drawSummary(canvas: Canvas, paint: Paint, income: Double, expense: Double, savings: Double, balance: Double, startY: Int) {
+        val boxWidth = (PAGE_WIDTH - (MARGIN * 2) - 30) / 4
         val boxHeight = 60f
         
         // Income Box
@@ -202,8 +208,11 @@ object PdfExporter {
         // Expense Box
         drawStatBox(canvas, paint, "Expense", expense, MARGIN.toFloat() + boxWidth + 10, startY.toFloat(), boxWidth.toFloat(), boxHeight, Color.parseColor("#FFEBEE"), Color.RED)
 
+        // Savings Box
+        drawStatBox(canvas, paint, "Net Savings", savings, MARGIN.toFloat() + (boxWidth * 2) + 20, startY.toFloat(), boxWidth.toFloat(), boxHeight, Color.parseColor("#F3E5F5"), Color.parseColor("#6A1B9A"))
+
         // Balance Box
-        drawStatBox(canvas, paint, "Balance", balance, MARGIN.toFloat() + (boxWidth * 2) + 20, startY.toFloat(), boxWidth.toFloat(), boxHeight, Color.parseColor("#E3F2FD"), COLOR_BRAND_DARK)
+        drawStatBox(canvas, paint, "Balance", balance, MARGIN.toFloat() + (boxWidth * 3) + 30, startY.toFloat(), boxWidth.toFloat(), boxHeight, Color.parseColor("#E3F2FD"), COLOR_BRAND_DARK)
     }
 
     private fun drawStatBox(canvas: Canvas, paint: Paint, label: String, amount: Double, x: Float, y: Float, width: Float, height: Float, bgColor: Int, textColor: Int) {

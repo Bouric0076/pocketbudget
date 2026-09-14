@@ -46,6 +46,7 @@ object BackupManager {
                     o.put("partyName", t.partyName)
                     o.put("timestamp", t.timestamp)
                     o.put("categoryId", t.categoryId ?: JSONObject.NULL)
+                    o.put("cashFlowBucket", t.cashFlowBucket)
                     o.put("accountName", t.accountName ?: JSONObject.NULL)
                     o.put("balanceAfter", t.balanceAfter ?: JSONObject.NULL)
                     o.put("transactionCost", t.transactionCost ?: JSONObject.NULL)
@@ -170,8 +171,7 @@ object BackupManager {
                 val txArray = root.getJSONArray("transactions")
                 for (i in 0 until txArray.length()) {
                     val o = txArray.getJSONObject(i)
-                    txList.add(
-                        TransactionEntity(
+                    val importedTransaction = TransactionEntity(
                             transactionId = o.getString("transactionId"),
                             amount = o.getDouble("amount"),
                             type = o.getString("type"),
@@ -182,6 +182,16 @@ object BackupManager {
                             balanceAfter = if (o.isNull("balanceAfter")) null else o.getDouble("balanceAfter"),
                             transactionCost = if (o.isNull("transactionCost")) null else o.getDouble("transactionCost"),
                             fullSmsBody = if (o.isNull("fullSmsBody")) null else o.getString("fullSmsBody")
+                        )
+                    txList.add(
+                        importedTransaction.copy(
+                            cashFlowBucket = o.optString(
+                                "cashFlowBucket",
+                                CashFlowClassifier.bucket(
+                                    importedTransaction,
+                                    catList.firstOrNull { it.id == importedTransaction.categoryId }?.name
+                                ).name
+                            )
                         )
                     )
                 }

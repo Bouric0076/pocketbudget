@@ -33,7 +33,7 @@ enum class TimeRange {
 }
 
 enum class TransactionFilter {
-    ALL, INCOME, EXPENSE, UNCATEGORIZED
+    ALL, INCOME, EXPENSE, SAVINGS, UNCATEGORIZED
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

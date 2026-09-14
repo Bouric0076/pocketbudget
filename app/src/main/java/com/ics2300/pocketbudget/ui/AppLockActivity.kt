@@ -65,7 +65,9 @@ class AppLockActivity : AppCompatActivity() {
         editPin.inputType =
             InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
 
-        editPin.importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            editPin.importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
+        }
         editPin.isSaveEnabled = false
         editPin.setTextIsSelectable(false)
     }

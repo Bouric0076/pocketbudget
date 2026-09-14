@@ -217,6 +217,7 @@ class TransactionsFragment : Fragment() {
                 R.id.chip_all -> TransactionFilter.ALL
                 R.id.chip_income -> TransactionFilter.INCOME
                 R.id.chip_expense -> TransactionFilter.EXPENSE
+                R.id.chip_savings -> TransactionFilter.SAVINGS
                 R.id.chip_uncategorized -> TransactionFilter.UNCATEGORIZED
                 else -> TransactionFilter.ALL
             }

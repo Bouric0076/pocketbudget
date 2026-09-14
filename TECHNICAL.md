@@ -44,3 +44,20 @@ The hook blocks commits containing:
 ## Notes
 - Keep the release keystore backed up outside the repository.
 - Never commit real secret values or signing files.
+
+## Cash-flow classification
+Transaction category and cash-flow meaning are intentionally separate.
+
+- `Income`: money received from an external source.
+- `Expense`: money spent.
+- `Savings`: money moved into or out of a user-designated savings pocket or till.
+- `Transfer`: money moved between accounts or cash channels.
+
+`Received` messages default to `Income`, but a user-selected `Savings` category is
+learned for both the party and account/till name. Later withdrawals from that
+same actor remain `Savings`. Savings and transfers are excluded from ordinary
+income/expense totals, but are exposed as net movement, transaction filters,
+analytics, and PDF summary data so they remain visible for financial oversight.
+
+The Kotlin-side rules live in `CashFlowClassifier`; database summary queries use
+the same bucket semantics for dashboard totals and filtering.

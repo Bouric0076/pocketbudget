@@ -93,7 +93,7 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
 
       - name: Build release APK
-        run: ./gradlew :app:assembleRelease
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleRelease
 
       - name: Generate checksum
         id: checksum

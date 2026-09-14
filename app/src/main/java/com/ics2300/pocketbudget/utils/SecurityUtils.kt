@@ -8,6 +8,8 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import java.security.MessageDigest
 import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 
 object SecurityUtils {
 
@@ -22,6 +24,12 @@ object SecurityUtils {
     private const val KEY_PRIVACY_MODE = "privacy_mode_enabled"
 
     const val LOCK_TIMEOUT_MS = 30 * 1000L
+
+    private const val HASH_VERSION = "v3"
+    private const val PBKDF2_ITERATIONS = 120_000
+    private const val HASH_BITS = 256
+    private const val PBKDF2_SHA256 = "PBKDF2WithHmacSHA256"
+    private const val PBKDF2_SHA1 = "PBKDF2WithHmacSHA1"
 
     private fun getSecurePrefsOrNull(context: Context): SharedPreferences? {
         return try {
@@ -57,30 +65,73 @@ object SecurityUtils {
     }
 
     private fun hashPin(pin: String, salt: ByteArray): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        digest.update(salt)
-        val hash = digest.digest(pin.toByteArray(Charsets.UTF_8))
+        val spec = PBEKeySpec(pin.toCharArray(), salt, PBKDF2_ITERATIONS, HASH_BITS)
+        val (algorithmId, hash) = try {
+            "sha256" to SecretKeyFactory.getInstance(PBKDF2_SHA256)
+                .generateSecret(spec)
+                .encoded
+        } catch (_: Exception) {
+            // PBKDF2-HMAC-SHA256 is unavailable on some Android 7 devices.
+            "sha1" to SecretKeyFactory.getInstance(PBKDF2_SHA1)
+                .generateSecret(spec)
+                .encoded
+        } finally {
+            spec.clearPassword()
+        }
 
         val saltBase64 = Base64.encodeToString(salt, Base64.NO_WRAP)
         val hashBase64 = Base64.encodeToString(hash, Base64.NO_WRAP)
 
-        return "v2:$saltBase64:$hashBase64"
+        return "$HASH_VERSION:$algorithmId:$saltBase64:$hashBase64"
     }
 
     private fun verifyPin(inputPin: String, storedValue: String): Boolean {
+        val parts = storedValue.split(":")
+        if (parts[0] != HASH_VERSION || (parts.size != 3 && parts.size != 4)) return false
+
+        return try {
+            val algorithmId = if (parts.size == 4) parts[1] else "sha256"
+            val saltIndex = if (parts.size == 4) 2 else 1
+            val hashIndex = if (parts.size == 4) 3 else 2
+            val algorithm = when (algorithmId) {
+                "sha256" -> PBKDF2_SHA256
+                "sha1" -> PBKDF2_SHA1
+                else -> return false
+            }
+            val salt = Base64.decode(parts[saltIndex], Base64.NO_WRAP)
+            val spec = PBEKeySpec(inputPin.toCharArray(), salt, PBKDF2_ITERATIONS, HASH_BITS)
+            val actualHash = try {
+                SecretKeyFactory.getInstance(algorithm).generateSecret(spec).encoded
+            } finally {
+                spec.clearPassword()
+            }
+            val actual = Base64.encodeToString(actualHash, Base64.NO_WRAP)
+            MessageDigest.isEqual(
+                parts[hashIndex].toByteArray(Charsets.UTF_8),
+                actual.toByteArray(Charsets.UTF_8)
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to verify PIN hash.", e)
+            false
+        }
+    }
+
+    private fun verifyLegacySha256Pin(inputPin: String, storedValue: String): Boolean {
         val parts = storedValue.split(":")
         if (parts.size != 3 || parts[0] != "v2") return false
 
         return try {
             val salt = Base64.decode(parts[1], Base64.NO_WRAP)
-            val expected = storedValue
-            val actual = hashPin(inputPin, salt)
+            val digest = MessageDigest.getInstance("SHA-256")
+            digest.update(salt)
+            val hash = digest.digest(inputPin.toByteArray(Charsets.UTF_8))
+            val actual = "v2:${parts[1]}:${Base64.encodeToString(hash, Base64.NO_WRAP)}"
             MessageDigest.isEqual(
-                expected.toByteArray(Charsets.UTF_8),
+                storedValue.toByteArray(Charsets.UTF_8),
                 actual.toByteArray(Charsets.UTF_8)
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to verify PIN hash.", e)
+            Log.e(TAG, "Failed to verify legacy PIN hash.", e)
             false
         }
     }
@@ -149,8 +200,14 @@ object SecurityUtils {
     fun checkPin(context: Context, inputPin: String): Boolean {
         val storedHash = readPinHash(context)
 
-        if (storedHash != null && storedHash.startsWith("v2:")) {
+        if (storedHash != null && storedHash.startsWith("v3:")) {
             return verifyPin(inputPin, storedHash)
+        }
+
+        if (storedHash != null && storedHash.startsWith("v2:")) {
+            val valid = verifyLegacySha256Pin(inputPin, storedHash)
+            if (valid) setPin(context, inputPin)
+            return valid
         }
 
         // Legacy migration path: old app may have stored plaintext fallback.

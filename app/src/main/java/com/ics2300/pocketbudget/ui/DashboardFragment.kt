@@ -183,6 +183,7 @@ class DashboardFragment : Fragment() {
         val isPrivacy = SecurityUtils.isPrivacyModeEnabled(context)
         binding.textIncomeAmount.text = CurrencyFormatter.formatKsh(stats.totalIncome, isPrivacy)
         binding.textExpenseAmount.text = CurrencyFormatter.formatKsh(stats.totalExpense, isPrivacy)
+        binding.textSavingsAmount.text = CurrencyFormatter.formatKsh(stats.totalSavings, isPrivacy)
         binding.textTxnCount.text = if (isPrivacy) {
             "••"
         } else {

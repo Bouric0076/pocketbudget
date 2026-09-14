@@ -12,7 +12,7 @@ import androidx.room.RoomDatabase
         NotificationEntity::class,
         ActorCategoryMapping::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {

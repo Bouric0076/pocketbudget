@@ -3,6 +3,7 @@ package com.ics2300.pocketbudget.data
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Index
+import com.ics2300.pocketbudget.utils.CashFlowBucket
 
 @Entity(
     tableName = "transactions",
@@ -16,6 +17,7 @@ data class TransactionEntity(
     val partyName: String,
     val timestamp: Long,
     val categoryId: Int?,
+    val cashFlowBucket: String = CashFlowBucket.EXPENSE.name,
     val accountName: String? = null, // Extra metadata for Paybills (e.g. account forEasyTalk)
     val balanceAfter: Double? = null,
     val transactionCost: Double? = null,

@@ -74,6 +74,7 @@ fun AnalyticsScreen(
 
     val totalIncome = analyticsSummary.totalIncome
     val totalExpense = analyticsSummary.totalExpense
+    val totalSavings = analyticsSummary.totalSavings
     val netFlow = totalIncome - totalExpense
     val savingsRate = if (totalIncome > 0) ((netFlow / totalIncome) * 100.0).coerceIn(-999.0, 999.0) else 0.0
     val avgDailySpend = if (dailyTrend.isNotEmpty()) totalExpense / dailyTrend.size else 0.0
@@ -161,6 +162,15 @@ fun AnalyticsScreen(
                         modifier = Modifier.weight(1f)
                     )
                 }
+            }
+
+            item {
+                InsightMiniCard(
+                    title = "Net Savings Movement",
+                    value = CurrencyFormatter.formatKsh(totalSavings),
+                    tint = AnalyticsPurple,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             item {

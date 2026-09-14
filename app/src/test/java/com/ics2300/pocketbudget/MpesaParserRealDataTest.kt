@@ -34,11 +34,7 @@ class MpesaParserRealDataTest {
         
         for (sample in samples) {
             val transaction = MpesaParser.parse(sample)
-            if (transaction == null) {
-                println("FAILED to parse: $sample")
-            } else {
-                println("Parsed: ${transaction.transactionId} | ${transaction.type} | ${transaction.amount} | ${transaction.partyName}")
-            }
+            assertNotNull("Sample ${parsedTransactions.size + 1} failed to parse", transaction)
             parsedTransactions.add(transaction)
         }
 
@@ -56,6 +52,7 @@ class MpesaParserRealDataTest {
         assertEquals("Paybill", parsedTransactions[3]?.type)
         
         assertNotNull("Sample 8 failed", parsedTransactions[7]) // M-Shwari
-        // This one might fail with current parser
+        assertEquals(350.0, parsedTransactions[7]?.amount)
+        assertEquals("Deposit", parsedTransactions[7]?.type)
     }
 }

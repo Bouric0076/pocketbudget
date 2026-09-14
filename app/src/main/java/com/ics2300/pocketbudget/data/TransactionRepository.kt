@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.ics2300.pocketbudget.utils.CategoryUtils
+import com.ics2300.pocketbudget.utils.CashFlowClassifier
 import com.ics2300.pocketbudget.utils.MpesaParser
 import com.ics2300.pocketbudget.utils.NotificationHelper
 import com.ics2300.pocketbudget.utils.SmsReader
@@ -173,13 +174,21 @@ class TransactionRepository(
             val transaction = transactionDao.getTransactionById(transactionId)
                 ?: return@withContext
 
-            val normalizedParty =
-                normalizePartyName(transaction.partyName)
+            val actorNames = listOf(
+                normalizePartyName(transaction.partyName),
+                normalizePartyName(transaction.accountName.orEmpty())
+            ).filter { it.isNotBlank() }.distinct()
+            val categories = ensureDefaultCategoriesExist()
+            val categoryName = categories.firstOrNull { it.id == categoryId }?.name
+            val cashFlowBucket = CashFlowClassifier
+                .bucket(transaction, categoryName)
+                .name
 
-            transactionDao.updateCategoryAndLearnActor(
+            transactionDao.updateCategoryAndLearnActors(
                 transactionId = transactionId,
-                partyName = normalizedParty,
-                categoryId = categoryId
+                actorNames = actorNames,
+                categoryId = categoryId,
+                cashFlowBucket = cashFlowBucket
             )
         }
     }
@@ -196,9 +205,17 @@ class TransactionRepository(
                 return@withContext
             }
 
+            val category = transactionDao.getCategoryById(categoryId) ?: return@withContext
+            val categoryBucket = when (category.name.lowercase(Locale.US)) {
+                "savings" -> "SAVINGS"
+                "transfer & cash", "transfer" -> "TRANSFER"
+                else -> "EXPENSE"
+            }
+
             transactionDao.bulkCategorizePartyAndLearn(
                 normalizedParty,
-                categoryId
+                categoryId,
+                categoryBucket
             )
         }
     }
@@ -224,6 +241,7 @@ class TransactionRepository(
         withContext(Dispatchers.IO) {
 
             val currentTime = System.currentTimeMillis()
+            val categories = ensureDefaultCategoriesExist()
 
             val dueItems =
                 transactionDao.getDueRecurringTransactions(currentTime)
@@ -232,14 +250,14 @@ class TransactionRepository(
 
                 try {
 
-                    val transaction = TransactionEntity(
+                    val transaction = classifyCashFlow(TransactionEntity(
                         transactionId = "REC_${item.id}_${item.nextDueDate}",
                         amount = item.amount,
                         type = item.type,
                         partyName = item.description,
                         timestamp = item.nextDueDate,
                         categoryId = item.categoryId
-                    )
+                    ), categories)
 
                     val calendar = Calendar.getInstance().apply {
                         timeInMillis = item.nextDueDate
@@ -374,6 +392,17 @@ class TransactionRepository(
 
                 cachedCategories = null
             }
+
+            if (categories.none { it.name.equals("Savings", true) }) {
+                transactionDao.insertCategory(
+                    CategoryEntity(
+                        name = "Savings",
+                        keywords = "SAVINGS,INVESTMENT,MMF,CHAMA",
+                        colorHex = CategoryUtils.getDefaultColorHex(10)
+                    )
+                )
+                cachedCategories = null
+            }
         }
 
         return transactionDao.getAllCategoriesList()
@@ -394,8 +423,10 @@ class TransactionRepository(
 
                 val categories = ensureDefaultCategoriesExist()
 
-                val categorized =
-                    categorizeTransaction(transaction, categories)
+                val categorized = classifyCashFlow(
+                    categorizeTransaction(transaction, categories),
+                    categories
+                )
 
                 if (categorized.categoryId == null) {
                     Log.e(TAG, "Transaction missing category.")
@@ -460,14 +491,47 @@ class TransactionRepository(
                 .filter { it.isNotBlank() }
                 .joinToString(" ")
 
-        if (party.isNotBlank()) {
-            matchedCategoryId =
-                transactionDao.getCategoryIdForActor(party)
+        var learnedCategory: CategoryEntity? = null
+        for (actor in listOf(party, account).filter { it.isNotBlank() }.distinct()) {
+            val learnedCategoryId = transactionDao.getCategoryIdForActor(actor)
+            val candidate = categories.firstOrNull { it.id == learnedCategoryId }
+            if (candidate != null &&
+                (!candidate.name.equals("Income", true) ||
+                    transaction.type.equals("Received", true) ||
+                    transaction.type.equals("Deposit", true))
+            ) {
+                learnedCategory = candidate
+                break
+            }
+        }
+
+        // A manually learned Income category should not turn a later
+        // withdrawal/payment from the same till into income. Other explicit
+        // categories, such as Savings, remain valid for both directions.
+        if (learnedCategory != null) {
+            matchedCategoryId = learnedCategory.id
+        }
+
+        // Incoming M-Pesa messages represent money received by default.
+        // Keyword matching must not turn a normal receipt from a bank, till,
+        // or merchant into an expense/transfer. A learned Savings mapping
+        // above is the deliberate exception for dedicated savings actors.
+        if (matchedCategoryId == null && transaction.type.equals("Received", true)) {
+            matchedCategoryId = categories.firstOrNull {
+                it.name.equals("Income", true)
+            }?.id
         }
 
         if (matchedCategoryId == null) {
 
             for (category in categories) {
+
+                if (category.name.equals("Income", true) &&
+                    !transaction.type.equals("Received", true) &&
+                    !transaction.type.equals("Deposit", true)
+                ) {
+                    continue
+                }
 
                 val keywords = category.keywords.split(",")
 
@@ -524,6 +588,18 @@ class TransactionRepository(
         return transaction.copy(
             categoryId = matchedCategoryId
                 ?: categories.firstOrNull()?.id
+        )
+    }
+
+    private fun classifyCashFlow(
+        transaction: TransactionEntity,
+        categories: List<CategoryEntity>
+    ): TransactionEntity {
+        val categoryName = categories.firstOrNull { it.id == transaction.categoryId }?.name
+        return transaction.copy(
+            cashFlowBucket = CashFlowClassifier
+                .bucket(transaction, categoryName)
+                .name
         )
     }
 
@@ -598,19 +674,22 @@ class TransactionRepository(
         var updatedCount = 0
 
         for (transaction in candidates) {
-            val categorized =
+            val categorized = classifyCashFlow(
                 categorizeTransaction(
                     transaction.copy(categoryId = null),
                     categories
-                )
+                ),
+                categories
+            )
 
             val newCategoryId =
                 categorized.categoryId ?: continue
 
             if (newCategoryId != transaction.categoryId) {
-                transactionDao.updateTransactionCategory(
+                transactionDao.updateTransactionCategoryAndBucket(
                     transaction.id,
-                    newCategoryId
+                    newCategoryId,
+                    categorized.cashFlowBucket
                 )
                 updatedCount++
             }
@@ -669,8 +748,9 @@ class TransactionRepository(
                     } else {
                         transaction
                     }
+                val classifiedTransaction = classifyCashFlow(transactionToInsert, categories)
 
-                if (transactionToInsert.categoryId == null) {
+                if (classifiedTransaction.categoryId == null) {
                     continue
                 }
 
@@ -678,19 +758,25 @@ class TransactionRepository(
 
                     val result =
                         transactionDao.insertTransaction(
-                            transactionToInsert
+                            classifiedTransaction
                         )
 
                     if (result != -1L) {
                         importedCount++
 
-                        val normalizedParty = normalizePartyName(transactionToInsert.partyName)
-                        val catId = transactionToInsert.categoryId
+                        val wasExplicitlyCategorized = transaction.categoryId != null
+                        val actorNames = listOf(
+                            normalizePartyName(classifiedTransaction.partyName),
+                            normalizePartyName(classifiedTransaction.accountName.orEmpty())
+                        ).filter { it.isNotBlank() }.distinct()
+                        val catId = classifiedTransaction.categoryId
                         val uncategorizedId = categories.find { it.name.equals("Uncategorized", true) }?.id
-                        if (normalizedParty.isNotBlank() && catId != uncategorizedId) {
-                            transactionDao.insertActorMapping(
-                                ActorCategoryMapping(normalizedParty, catId)
-                            )
+                        if (wasExplicitlyCategorized && catId != uncategorizedId) {
+                            actorNames.forEach { actorName ->
+                                transactionDao.insertActorMapping(
+                                    ActorCategoryMapping(actorName, catId)
+                                )
+                            }
                         }
                     }
 
@@ -740,11 +826,10 @@ class TransactionRepository(
                             smsData.date
                         ) ?: continue
 
-                    val categorized =
-                        categorizeTransaction(
-                            transaction,
-                            categories
-                        )
+                    val categorized = classifyCashFlow(
+                        categorizeTransaction(transaction, categories),
+                        categories
+                    )
 
                     if (categorized.categoryId == null) {
                         continue
@@ -811,11 +896,10 @@ class TransactionRepository(
                             smsData.date
                         ) ?: continue
 
-                    val categorized =
-                        categorizeTransaction(
-                            transaction,
-                            categories
-                        )
+                    val categorized = classifyCashFlow(
+                        categorizeTransaction(transaction, categories),
+                        categories
+                    )
 
                     if (categorized.categoryId == null) {
                         continue
@@ -868,7 +952,10 @@ class TransactionRepository(
     }
 
     suspend fun insert(transaction: TransactionEntity) {
-        transactionDao.insertTransaction(transaction)
+        withContext(Dispatchers.IO) {
+            val categories = ensureDefaultCategoriesExist()
+            transactionDao.insertTransaction(classifyCashFlow(transaction, categories))
+        }
     }
 
     suspend fun exportBackup(uri: Uri, password: String): Result<Boolean> {

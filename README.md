@@ -15,11 +15,11 @@ Always download the latest tagged release unless a specific version is shared wi
 
 ## How to Install (Android)
 
-### ⚠️ Important: Google Play Protect Warning on First Install
+### Installation and verification
 
 **What You'll See:**
 
-When you first install PocketBudget KE from GitHub, Google Play Protect may show a warning:
+When installing an APK outside Google Play, Android may show a security warning. Only install APKs downloaded from the official release page and verify the published SHA-256 checksum.
 
 ![Google Play Protect Warning](assets/image.png)
 
@@ -33,15 +33,12 @@ This app can request access to sensitive data.
 This can increase the risk of identity theft or financial fraud.
 ```
 
-**This is a false positive — the app is completely safe.** Here's why:
+PocketBudget requires SMS access to import M-Pesa transactions, so Android may treat it as sensitive. Review the requested permissions carefully:
 
 - PocketBudget reads M-Pesa SMS messages to automatically categorize your spending
-- Android's Play Protect flags ANY app requesting SMS permission as potentially risky (conservative security)
-- **PocketBudget is NOT malicious:**
-  - ✅ Runs 100% offline (no internet calls, no data sent)
-  - ✅ All data encrypted locally on your phone
-  - ✅ Fully open-source on GitHub (code is public)
-  - ✅ Stores everything in encrypted Room database
+- ✅ The project source is available on GitHub
+- ✅ Transaction data is intended to remain on the device
+- ✅ SMS access is used for M-Pesa transaction import
 
 ### Step-by-Step Installation
 
@@ -59,44 +56,18 @@ This can increase the risk of identity theft or financial fraud.
    - Tap **"Install"** or **"Allow"**
 
 4. **Google Play Protect Warning Appears** ← This is the expected step
-   - You'll see "App blocked to protect your device" with a **"Got it"** button
-   - **Tap "Got it"**
-   - Installation will NOT proceed on first attempt (intentional Safety behavior)
-   - **Don't worry — this is normal**
+   - Android may show a warning such as "App blocked to protect your device"
+   - If Android blocks the APK, cancel the installation and verify the download and checksum.
 
-5. **Wait 10-30 Seconds**
-   - Let Play Protect finish its check
-   - You may be returned to the file manager or downloads
-
-6. **Install Again** ← Second attempt succeeds
-   - Tap the APK file again to install
-   - **This time, installation will complete successfully**
-   - Play Protect allows apps after the first pass
-
-7. **Open PocketBudget KE**
+5. **Open PocketBudget KE**
    - Tap "Open" when installation finishes
    - Or find it in your app drawer
 
-### Why Play Protect Blocks on First Install
-
-Google's Play Protect is designed to:
-- Scan apps for malicious behavior
-- Flag any app requesting "sensitive" permissions (like SMS)
-- Block installation on first attempt as a precaution
-- Allow after verification if no threats detected
-
-Since PocketBudget legitimately needs SMS access for M-Pesa transactions, Play Protect flags it. But after the first block, it realizes the app is safe and allows installation to proceed.
-
 ### Installation Troubleshooting
 
-**Still blocked after 2nd attempt?**
+**Still blocked?**
 
-Try disabling Play Protect temporarily:
-1. Go to **Settings → Apps & Notifications → Google Play Protect** (or search "Play Protect")
-2. Tap the settings icon (⚙️) in top right
-3. **Uncheck** "Scan apps with Play Protect"
-4. Try installing PocketBudget again
-5. **Re-enable** Play Protect after installation completes
+Do not disable Play Protect. Download the APK again from the official release page, verify its SHA-256 checksum, and report the release version and Android device if the problem continues.
 
 ## What the App Does
 - Reads M-Pesa transaction SMS messages (with your permission).
@@ -150,12 +121,12 @@ Please share:
 ## Common Install Issues
 
 - **"App blocked to protect your device" warning:**
-  This is normal and expected. Tap "Got it", wait 10-30 seconds, then try installing the APK again. Second attempt will succeed. (See installation guide above)
+  Do not disable Play Protect. Verify that the APK came from the official release page and matches its published checksum.
 
 - **APK does not install after trying twice:**
   - Make sure you downloaded the **complete APK file** (check file size ~30-50 MB)
   - Enable "Installation from Unknown Sources" for your file manager (Settings → Apps → [File Manager] → Permissions)
-  - Try disabling Play Protect temporarily as described in the installation guide above
+  - Do not disable Play Protect; download the APK again and verify its checksum
 
 - **App crashes on launch:**
   - Force close and reopen the app

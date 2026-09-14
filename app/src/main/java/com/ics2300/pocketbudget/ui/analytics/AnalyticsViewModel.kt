@@ -11,6 +11,8 @@ import com.ics2300.pocketbudget.data.DashboardStats
 import com.ics2300.pocketbudget.data.TransactionEntity
 import com.ics2300.pocketbudget.data.TransactionRepository
 import com.ics2300.pocketbudget.ui.ChartData
+import com.ics2300.pocketbudget.utils.CashFlowBucket
+import com.ics2300.pocketbudget.utils.CashFlowClassifier
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -43,13 +45,18 @@ class AnalyticsViewModel @Inject constructor(private val repository: Transaction
     val analyticsDailyTrend: LiveData<List<ChartData>> = combine(
         analyticsMonth,
         analyticsYear,
-        repository.allTransactions
-    ) { month: Int, year: Int, transactions: List<TransactionEntity> ->
+        repository.allTransactions,
+        repository.allCategories
+    ) { month: Int, year: Int, transactions: List<TransactionEntity>, categories: List<CategoryEntity> ->
+        val categoryById = categories.associateBy { it.id }
         val filtered = transactions.filter {
             val cal = Calendar.getInstance()
             cal.timeInMillis = it.timestamp
+            val categoryName = categoryById[it.categoryId]?.name
             (cal.get(Calendar.MONTH) + 1) == month && cal.get(Calendar.YEAR) == year &&
-            (it.type != "Received" && it.type != "Deposit")
+            (it.type != "Received" && it.type != "Deposit") &&
+            CashFlowClassifier.persistedBucket(it, categoryName) != CashFlowBucket.SAVINGS &&
+                CashFlowClassifier.persistedBucket(it, categoryName) != CashFlowBucket.TRANSFER
         }
         
         // Group by day

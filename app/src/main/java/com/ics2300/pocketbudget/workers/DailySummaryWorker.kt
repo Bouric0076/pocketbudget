@@ -5,6 +5,9 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.ics2300.pocketbudget.MainApplication
 import com.ics2300.pocketbudget.utils.NotificationHelper
+import com.ics2300.pocketbudget.utils.CashFlowBucket
+import com.ics2300.pocketbudget.utils.CashFlowClassifier
+import kotlinx.coroutines.flow.first
 import java.util.Calendar
 
 class DailySummaryWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -25,10 +28,13 @@ class DailySummaryWorker(context: Context, params: WorkerParameters) : Coroutine
             val end = calendar.timeInMillis
             
             val transactions = repository.getTransactionsByDateRange(start, end)
+            val categories = repository.allCategories.first().associateBy { it.id }
             
             // Filter expenses
             val totalExpense = transactions
-                .filter { it.type != "Received" && it.type != "Deposit" }
+                .filter {
+                    CashFlowClassifier.persistedBucket(it, categories[it.categoryId]?.name) == CashFlowBucket.EXPENSE
+                }
                 .sumOf { it.amount }
                 
             if (totalExpense > 0) {
