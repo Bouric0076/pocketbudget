@@ -21,6 +21,8 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
+    private const val LEGACY_FALLBACK_DB_KEY = "pocketbudget_fallback_key_2026_06"
+
     private val MIGRATION_5_6 = object : Migration(5, 6) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
@@ -75,7 +77,10 @@ object AppModule {
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
         net.sqlcipher.database.SQLiteDatabase.loadLibs(context)
         val dbFile = context.getDatabasePath("pocket-budget-database")
-        val passphrase = getOrCreateDbPassphrase(context)
+        val passphrase = resolveDbPassphrase(
+            dbFile,
+            getOrCreateDbPassphrase(context)
+        )
 
         if (dbFile.exists()) {
             encryptExistingDatabaseIfNecessary(context, dbFile, passphrase)
@@ -124,6 +129,63 @@ object AppModule {
                 "Secure database key storage is unavailable; refusing to use an insecure fallback.",
                 e
             )
+        }
+    }
+
+    /**
+     * Older builds could encrypt the database with the fallback key when
+     * EncryptedSharedPreferences was unavailable. Try that key only when an
+     * existing encrypted database proves that the current key is not usable.
+     * This keeps existing user data recoverable during the security migration.
+     */
+    private fun resolveDbPassphrase(
+        dbFile: java.io.File,
+        currentPassphrase: ByteArray
+    ): ByteArray {
+        if (!dbFile.exists()) return currentPassphrase
+        if (canOpenEncryptedDatabase(dbFile, currentPassphrase)) return currentPassphrase
+
+        val legacyPassphrase = LEGACY_FALLBACK_DB_KEY.toByteArray(Charsets.UTF_8)
+        if (canOpenEncryptedDatabase(dbFile, legacyPassphrase)) {
+            android.util.Log.w(
+                "AppModule",
+                "Recovered database with the legacy SQLCipher key; retaining it for compatibility."
+            )
+            return legacyPassphrase
+        }
+
+        return currentPassphrase
+    }
+
+    private fun canOpenEncryptedDatabase(
+        dbFile: java.io.File,
+        passphrase: ByteArray
+    ): Boolean {
+        return try {
+            val db = net.sqlcipher.database.SQLiteDatabase.openDatabase(
+                dbFile.absolutePath,
+                passphrase,
+                null,
+                net.sqlcipher.database.SQLiteDatabase.OPEN_READONLY,
+                null,
+                null
+            )
+            try {
+                val cursor = db.rawQuery(
+                    "SELECT count(*) FROM sqlite_master",
+                    emptyArray<String>()
+                )
+                try {
+                    cursor.moveToFirst()
+                } finally {
+                    cursor.close()
+                }
+            } finally {
+                db.close()
+            }
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 
