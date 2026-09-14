@@ -84,6 +84,7 @@ object AppModule {
 
         if (dbFile.exists()) {
             encryptExistingDatabaseIfNecessary(context, dbFile, passphrase)
+            repairExportedDatabaseVersion(dbFile, passphrase)
         }
 
         val factory = net.sqlcipher.database.SupportFactory(passphrase)
@@ -231,6 +232,15 @@ object AppModule {
                 try {
                     val sourcePath = dbFile.absolutePath.replace("'", "''")
                     encryptedDb.rawExecSQL("ATTACH DATABASE '$sourcePath' AS plain KEY ''")
+                    val sourceVersionCursor = encryptedDb.rawQuery(
+                        "PRAGMA plain.user_version",
+                        emptyArray<String>()
+                    )
+                    val sourceVersion = try {
+                        if (sourceVersionCursor.moveToFirst()) sourceVersionCursor.getInt(0) else 0
+                    } finally {
+                        sourceVersionCursor.close()
+                    }
                     val exportCursor = encryptedDb.rawQuery(
                         "SELECT sqlcipher_export('main', 'plain')",
                         emptyArray<String>()
@@ -240,6 +250,7 @@ object AppModule {
                     } finally {
                         exportCursor.close()
                     }
+                    encryptedDb.rawExecSQL("PRAGMA user_version = $sourceVersion")
                     encryptedDb.rawExecSQL("DETACH DATABASE plain")
                 } finally {
                     encryptedDb.close()
@@ -262,6 +273,72 @@ object AppModule {
             } catch (e: Exception) {
                 android.util.Log.e("AppModule", "Encryption migration failed.", e)
             }
+        }
+    }
+
+    /**
+     * Older export builds copied tables but left SQLCipher's user_version at
+     * zero. Restore the version from the schema shape so Room can run the
+     * normal migrations instead of treating the database as brand new.
+     */
+    private fun repairExportedDatabaseVersion(
+        dbFile: java.io.File,
+        passphrase: ByteArray
+    ) {
+        try {
+            val db = net.sqlcipher.database.SQLiteDatabase.openDatabase(
+                dbFile.absolutePath,
+                passphrase,
+                null,
+                net.sqlcipher.database.SQLiteDatabase.OPEN_READWRITE,
+                null,
+                null
+            )
+            try {
+                val versionCursor = db.rawQuery("PRAGMA user_version", emptyArray<String>())
+                val version = try {
+                    if (versionCursor.moveToFirst()) versionCursor.getInt(0) else 0
+                } finally {
+                    versionCursor.close()
+                }
+                if (version != 0) return
+
+                val tableCursor = db.rawQuery(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'transactions'",
+                    emptyArray<String>()
+                )
+                val hasTransactions = try {
+                    tableCursor.moveToFirst()
+                } finally {
+                    tableCursor.close()
+                }
+                if (!hasTransactions) return
+
+                val columnCursor = db.rawQuery("PRAGMA table_info(transactions)", emptyArray<String>())
+                var hasCashFlowBucket = false
+                try {
+                    val nameColumn = columnCursor.getColumnIndex("name")
+                    while (columnCursor.moveToNext()) {
+                        if (nameColumn >= 0 && columnCursor.getString(nameColumn) == "cashFlowBucket") {
+                            hasCashFlowBucket = true
+                            break
+                        }
+                    }
+                } finally {
+                    columnCursor.close()
+                }
+
+                val repairedVersion = if (hasCashFlowBucket) 8 else 7
+                db.rawExecSQL("PRAGMA user_version = $repairedVersion")
+                android.util.Log.i(
+                    "AppModule",
+                    "Repaired exported database schema version to $repairedVersion."
+                )
+            } finally {
+                db.close()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AppModule", "Database schema version repair failed.", e)
         }
     }
 
