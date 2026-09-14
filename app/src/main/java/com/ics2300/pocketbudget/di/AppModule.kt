@@ -83,7 +83,9 @@ object AppModule {
         )
 
         if (dbFile.exists()) {
-            encryptExistingDatabaseIfNecessary(context, dbFile, passphrase)
+            if (!canOpenEncryptedDatabase(dbFile, passphrase)) {
+                encryptExistingDatabaseIfNecessary(context, dbFile, passphrase)
+            }
             repairExportedDatabaseVersion(dbFile, passphrase)
         }
 
