@@ -35,7 +35,7 @@ class DailySummaryWorker(context: Context, params: WorkerParameters) : Coroutine
                 .filter {
                     CashFlowClassifier.persistedBucket(it, categories[it.categoryId]?.name) == CashFlowBucket.EXPENSE
                 }
-                .sumOf { it.amount }
+                .sumOf { if (it.type.equals("Reversal", true)) -it.amount else it.amount }
                 
             if (totalExpense > 0) {
                 NotificationHelper.showDailySummaryNotification(applicationContext, totalExpense)

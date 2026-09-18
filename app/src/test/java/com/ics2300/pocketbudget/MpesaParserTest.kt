@@ -45,4 +45,22 @@ class MpesaParserTest {
         assert(transaction?.amount == 1165.45)
         assert(transaction?.type == "Fuliza Loan")
     }
+
+    @Test
+    fun testMshwariTransferFromIsSavingsWithdrawal() {
+        val body = "UBE6U6I0FD Confirmed.Ksh350.00 transferred from M-Shwari account on 14/2/26 at 2:42 PM."
+        val transaction = MpesaParser.parse(body)
+
+        assertNotNull(transaction)
+        assertEquals("Withdraw", transaction?.type)
+    }
+
+    @Test
+    fun testMshwariTransferToIsSavingsDeposit() {
+        val body = "UBE6U6I0FD Confirmed.Ksh350.00 transferred to M-Shwari account on 14/2/26 at 2:42 PM."
+        val transaction = MpesaParser.parse(body)
+
+        assertNotNull(transaction)
+        assertEquals("Deposit", transaction?.type)
+    }
 }

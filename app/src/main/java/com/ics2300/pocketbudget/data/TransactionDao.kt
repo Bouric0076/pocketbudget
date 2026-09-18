@@ -28,7 +28,7 @@ interface TransactionDao {
         AND (
             :filterType = 'ALL' 
             OR (:filterType = 'INCOME' AND transactions.cashFlowBucket = 'INCOME')
-            OR (:filterType = 'EXPENSE' AND transactions.cashFlowBucket = 'EXPENSE')
+            OR (:filterType = 'EXPENSE' AND transactions.cashFlowBucket IN ('EXPENSE', 'TRANSFER'))
             OR (:filterType = 'SAVINGS' AND transactions.cashFlowBucket = 'SAVINGS')
             OR (:filterType = 'UNCATEGORIZED' AND (transactions.categoryId IS NULL OR categories.name = 'Uncategorized'))
         )
@@ -76,7 +76,7 @@ interface TransactionDao {
         AND (
             :filterType = 'ALL' 
             OR (:filterType = 'INCOME' AND cashFlowBucket = 'INCOME')
-            OR (:filterType = 'EXPENSE' AND cashFlowBucket = 'EXPENSE')
+            OR (:filterType = 'EXPENSE' AND cashFlowBucket IN ('EXPENSE', 'TRANSFER'))
             OR (:filterType = 'SAVINGS' AND cashFlowBucket = 'SAVINGS')
             OR (:filterType = 'UNCATEGORIZED' AND (categoryId IS NULL OR categoryId IN (SELECT id FROM categories WHERE name = 'Uncategorized')))
         )
@@ -96,11 +96,22 @@ interface TransactionDao {
     @Query(
         """
         SELECT
-            COALESCE(SUM(CASE WHEN cashFlowBucket = 'INCOME' THEN amount ELSE 0 END), 0) as totalIncome,
-            COALESCE(SUM(CASE WHEN cashFlowBucket = 'EXPENSE' THEN amount ELSE 0 END), 0) as totalExpense,
             COALESCE(SUM(CASE
-                WHEN cashFlowBucket IN ('SAVINGS', 'TRANSFER') THEN 0
+                WHEN cashFlowBucket = 'INCOME' AND type = 'Reversal' THEN -amount
                 WHEN cashFlowBucket = 'INCOME' THEN amount
+                ELSE 0
+            END), 0) as totalIncome,
+            COALESCE(SUM(CASE
+                WHEN cashFlowBucket IN ('EXPENSE', 'TRANSFER') AND type = 'Reversal' THEN -amount
+                WHEN cashFlowBucket IN ('EXPENSE', 'TRANSFER') THEN amount
+                ELSE 0
+            END), 0) as totalExpense,
+            COALESCE(SUM(CASE
+                WHEN cashFlowBucket = 'SAVINGS' THEN 0
+                WHEN cashFlowBucket = 'INCOME' AND type = 'Reversal' THEN -amount
+                WHEN cashFlowBucket = 'INCOME' THEN amount
+                WHEN cashFlowBucket = 'BORROWING' THEN amount
+                WHEN type = 'Reversal' THEN amount
                 ELSE -amount
             END), 0) as balance,
             COUNT(*) as transactionCount,
@@ -113,7 +124,8 @@ interface TransactionDao {
                 WHEN cashFlowBucket = 'TRANSFER' AND type IN ('Received', 'Deposit') THEN amount
                 WHEN cashFlowBucket = 'TRANSFER' THEN -amount
                 ELSE 0
-            END), 0) as totalTransfers
+            END), 0) as totalTransfers,
+            COALESCE(SUM(CASE WHEN cashFlowBucket = 'BORROWING' THEN amount ELSE 0 END), 0) as totalBorrowed
         FROM transactions
         LEFT JOIN categories ON transactions.categoryId = categories.id
         WHERE (:startDate IS NULL OR timestamp >= :startDate)
@@ -135,10 +147,16 @@ interface TransactionDao {
     @Query(
         """
         UPDATE transactions
-        SET categoryId = :categoryId,
+        SET categoryId = CASE
+                WHEN :categoryBucket = 'INCOME'
+                    AND type NOT IN ('Received', 'Deposit', 'Reversal')
+                    THEN :uncategorizedCategoryId
+                ELSE :categoryId
+            END,
             cashFlowBucket = CASE
                 WHEN :categoryBucket = 'SAVINGS' THEN 'SAVINGS'
-                WHEN :categoryBucket = 'TRANSFER' THEN 'TRANSFER'
+                WHEN :categoryBucket = 'EXPENSE' THEN 'EXPENSE'
+                WHEN :categoryBucket = 'INCOME' AND type IN ('Received', 'Deposit', 'Reversal') THEN 'INCOME'
                 WHEN type IN ('Received', 'Deposit') THEN 'INCOME'
                 ELSE 'EXPENSE'
             END
@@ -148,7 +166,8 @@ interface TransactionDao {
     suspend fun updateTransactionsCategoryAndBucketByPartyName(
         partyName: String,
         categoryId: Int,
-        categoryBucket: String
+        categoryBucket: String,
+        uncategorizedCategoryId: Int
     )
 
     @Query("SELECT * FROM transactions WHERE id = :transactionId")
@@ -235,7 +254,16 @@ interface TransactionDao {
     @Query("DELETE FROM categories WHERE id = :id")
     suspend fun deleteCategory(id: Int)
 
-    @Query("UPDATE transactions SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
+    @Query("""
+        UPDATE transactions
+        SET categoryId = :newCategoryId,
+            cashFlowBucket = CASE
+                WHEN type = 'Fuliza Loan' THEN 'BORROWING'
+                WHEN type IN ('Received', 'Deposit') THEN 'INCOME'
+                ELSE 'EXPENSE'
+            END
+        WHERE categoryId = :oldCategoryId
+    """)
     suspend fun reassignTransactionsCategory(oldCategoryId: Int, newCategoryId: Int)
 
     @Query("UPDATE recurring_transactions SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
@@ -258,7 +286,7 @@ interface TransactionDao {
             c.colorHex
         FROM transactions t
         INNER JOIN categories c ON t.categoryId = c.id
-        WHERE t.cashFlowBucket NOT IN ('INCOME', 'TRANSFER')
+        WHERE t.cashFlowBucket IN ('EXPENSE', 'TRANSFER')
         GROUP BY c.id
         ORDER BY totalAmount DESC
         """
@@ -273,7 +301,7 @@ interface TransactionDao {
         SELECT t.partyName, SUM(t.amount) as totalAmount, COUNT(*) as transactionCount
         FROM transactions t
         LEFT JOIN categories c ON t.categoryId = c.id
-        WHERE t.cashFlowBucket = 'EXPENSE'
+        WHERE t.cashFlowBucket IN ('EXPENSE', 'TRANSFER')
         GROUP BY partyName
         ORDER BY totalAmount DESC
         LIMIT :limit
@@ -286,7 +314,7 @@ interface TransactionDao {
         SELECT t.partyName, SUM(t.amount) as totalAmount, COUNT(*) as transactionCount
         FROM transactions t
         LEFT JOIN categories c ON t.categoryId = c.id
-        WHERE t.cashFlowBucket = 'EXPENSE'
+        WHERE t.cashFlowBucket IN ('EXPENSE', 'TRANSFER')
         AND t.timestamp BETWEEN :startDate AND :endDate
         GROUP BY partyName
         ORDER BY totalAmount DESC
@@ -319,7 +347,7 @@ interface TransactionDao {
             c.name as categoryName, 
             COALESCE(SUM(CASE 
                 WHEN t.type = 'Reversal' THEN -t.amount
-                WHEN t.cashFlowBucket = 'EXPENSE' THEN t.amount
+                WHEN t.cashFlowBucket IN ('EXPENSE', 'TRANSFER') THEN t.amount
                 ELSE 0 
             END), 0) as totalSpent,
             COALESCE(b.amount, 0) as budgetAmount,
@@ -336,7 +364,7 @@ interface TransactionDao {
             ON c.id = b.categoryId 
             AND b.month = :month 
             AND b.year = :year
-        WHERE c.name NOT IN ('Transfer', 'Transfer & Cash', 'Income', 'Savings')
+        WHERE c.name NOT IN ('Income', 'Savings')
         GROUP BY c.id
         """
     )
@@ -383,9 +411,15 @@ interface TransactionDao {
     suspend fun bulkCategorizePartyAndLearn(
         partyName: String,
         categoryId: Int,
-        categoryBucket: String
+        categoryBucket: String,
+        uncategorizedCategoryId: Int
     ) {
-        updateTransactionsCategoryAndBucketByPartyName(partyName, categoryId, categoryBucket)
+        updateTransactionsCategoryAndBucketByPartyName(
+            partyName,
+            categoryId,
+            categoryBucket,
+            uncategorizedCategoryId
+        )
         insertActorMapping(ActorCategoryMapping(partyName, categoryId))
     }
 

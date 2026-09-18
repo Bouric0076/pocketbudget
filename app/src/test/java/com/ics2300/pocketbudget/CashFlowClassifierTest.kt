@@ -48,4 +48,48 @@ class CashFlowClassifierTest {
             CashFlowClassifier.bucket(received, "Income")
         )
     }
+
+    @Test
+    fun transferAndCashIsCountedAsExpense() {
+        val sent = transaction("Sent")
+
+        assertEquals(
+            CashFlowBucket.EXPENSE,
+            CashFlowClassifier.bucket(sent, "Transfer & Cash")
+        )
+    }
+
+    @Test
+    fun transferAndCashRemainsExpenseForIncomingCashRecords() {
+        val received = transaction("Received")
+
+        assertEquals(
+            CashFlowBucket.EXPENSE,
+            CashFlowClassifier.bucket(received, "Transfer & Cash")
+        )
+    }
+
+    @Test
+    fun reversalOfIncomeRemainsIncomeForNetFlowAccounting() {
+        val reversal = transaction("Reversal")
+
+        assertEquals(
+            CashFlowBucket.INCOME,
+            CashFlowClassifier.bucket(reversal, "Income")
+        )
+    }
+
+    @Test
+    fun fulizaLoanIsBorrowingNotIncomeOrExpense() {
+        val loan = transaction("Fuliza Loan")
+
+        assertEquals(
+            CashFlowBucket.BORROWING,
+            CashFlowClassifier.bucket(loan, "Debt & Credit")
+        )
+        assertEquals(
+            CashFlowBucket.BORROWING,
+            CashFlowClassifier.persistedBucket(loan, "Debt & Credit")
+        )
+    }
 }

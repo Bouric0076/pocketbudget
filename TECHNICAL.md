@@ -51,13 +51,23 @@ Transaction category and cash-flow meaning are intentionally separate.
 - `Income`: money received from an external source.
 - `Expense`: money spent.
 - `Savings`: money moved into or out of a user-designated savings pocket or till.
-- `Transfer`: money moved between accounts or cash channels.
+- `Borrowing`: loan or credit proceeds, such as a Fuliza disbursement. This
+  increases available cash but is not earned income.
+- `Transfer`: a legacy bucket retained for database compatibility. New and
+  migrated `Transfer & Cash` transactions are treated as `Expense`, because
+  money sent, withdrawn, or moved out is spending from the tracked wallet.
 
 `Received` messages default to `Income`, but a user-selected `Savings` category is
 learned for both the party and account/till name. Later withdrawals from that
-same actor remain `Savings`. Savings and transfers are excluded from ordinary
-income/expense totals, but are exposed as net movement, transaction filters,
-analytics, and PDF summary data so they remain visible for financial oversight.
+same actor remain `Savings`. Savings is excluded from ordinary income/expense
+totals and remains exposed as net movement. `Transfer & Cash` is included in
+expense totals, category spending, budgets, analytics, exports, and daily
+summaries.
+
+`Debt & Credit` is used for Fuliza and other credit activity. Loan proceeds are
+tracked as borrowing and affect net cash; repayments remain expense-side cash
+outflows. The app does not yet split a repayment into principal and interest
+because the imported M-Pesa message does not reliably provide that breakdown.
 
 The Kotlin-side rules live in `CashFlowClassifier`; database summary queries use
 the same bucket semantics for dashboard totals and filtering.

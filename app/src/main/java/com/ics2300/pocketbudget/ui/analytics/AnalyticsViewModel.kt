@@ -54,9 +54,7 @@ class AnalyticsViewModel @Inject constructor(private val repository: Transaction
             cal.timeInMillis = it.timestamp
             val categoryName = categoryById[it.categoryId]?.name
             (cal.get(Calendar.MONTH) + 1) == month && cal.get(Calendar.YEAR) == year &&
-            (it.type != "Received" && it.type != "Deposit") &&
-            CashFlowClassifier.persistedBucket(it, categoryName) != CashFlowBucket.SAVINGS &&
-                CashFlowClassifier.persistedBucket(it, categoryName) != CashFlowBucket.TRANSFER
+            CashFlowClassifier.persistedBucket(it, categoryName) == CashFlowBucket.EXPENSE
         }
         
         // Group by day
@@ -73,7 +71,9 @@ class AnalyticsViewModel @Inject constructor(private val repository: Transaction
         val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
         
         (1..daysInMonth).map { day ->
-            val amount = grouped[day]?.sumOf { it.amount } ?: 0.0
+            val amount = grouped[day]?.sumOf {
+                if (it.type.equals("Reversal", true)) -it.amount else it.amount
+            } ?: 0.0
             
             val dayCal = Calendar.getInstance()
             dayCal.set(Calendar.MONTH, month - 1)

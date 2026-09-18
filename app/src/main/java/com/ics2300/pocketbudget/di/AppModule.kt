@@ -72,6 +72,28 @@ object AppModule {
         }
     }
 
+    private val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Transfer & Cash is a spending category. Normalize rows created
+            // by version 8, which persisted that category as TRANSFER.
+            db.execSQL(
+                """
+                UPDATE transactions
+                SET cashFlowBucket = CASE
+                    WHEN type = 'Fuliza Loan' THEN 'BORROWING'
+                    ELSE 'EXPENSE'
+                END
+                WHERE type = 'Fuliza Loan'
+                   OR cashFlowBucket = 'TRANSFER'
+                   OR categoryId IN (
+                       SELECT id FROM categories
+                       WHERE LOWER(name) IN ('transfer', 'transfer & cash')
+                   )
+                """.trimIndent()
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -97,7 +119,7 @@ object AppModule {
             "pocket-budget-database"
         )
             .openHelperFactory(factory)
-            .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
             .build()
     }
 

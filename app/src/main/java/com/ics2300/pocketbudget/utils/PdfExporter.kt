@@ -52,11 +52,14 @@ object PdfExporter {
                 // Calculate Summary Data
                 val totalIncome = transactions
                     .filter { CashFlowClassifier.persistedBucket(it, categoryMap[it.categoryId]) == CashFlowBucket.INCOME }
-                    .sumOf { it.amount }
+                    .sumOf { if (it.type.equals("Reversal", true)) -it.amount else it.amount }
                 val totalExpense = transactions
                     .filter { CashFlowClassifier.persistedBucket(it, categoryMap[it.categoryId]) == CashFlowBucket.EXPENSE }
                     .sumOf { if (it.type == "Reversal") -it.amount else it.amount }
-                val balance = totalIncome - totalExpense
+                val totalBorrowed = transactions
+                    .filter { CashFlowClassifier.persistedBucket(it, categoryMap[it.categoryId]) == CashFlowBucket.BORROWING }
+                    .sumOf { it.amount }
+                val balance = totalIncome + totalBorrowed - totalExpense
                 
                 // Group Expenses by Category for Chart
                 val expensesByCategory = transactions

@@ -10,6 +10,8 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.ics2300.pocketbudget.R
 import com.ics2300.pocketbudget.data.TransactionEntity
+import com.ics2300.pocketbudget.utils.CashFlowBucket
+import com.ics2300.pocketbudget.utils.CashFlowClassifier
 import com.ics2300.pocketbudget.databinding.ItemTransactionBinding
 import com.ics2300.pocketbudget.utils.CurrencyFormatter
 import com.ics2300.pocketbudget.utils.SecurityUtils
@@ -82,7 +84,10 @@ class TransactionAdapter(
             b.textDate.text = formatTimestamp(tx.timestamp)
 
             // ── Amount ────────────────────────────────────────────────────
-            val isIncome = tx.type.lowercase() in listOf("received", "deposit")
+            val bucket = CashFlowClassifier.persistedBucket(tx, category?.name)
+            val isIncome = tx.type.lowercase() in listOf("received", "deposit") ||
+                bucket == CashFlowBucket.BORROWING ||
+                (tx.type.equals("Reversal", true) && !category?.name.equals("Income", true))
             val prefix   = if (isIncome) "+ " else "- "
             b.textAmount.text = prefix + CurrencyFormatter.formatKsh(tx.amount, isPrivacy)
             b.textAmount.setTextColor(

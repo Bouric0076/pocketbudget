@@ -117,11 +117,11 @@ object MpesaParser {
         ParserRule(RECEIVED_PATTERN, "Received") { matcher, _ ->
             createTransaction(matcher, "Received")
         },
-        ParserRule(MSHWARI_WITHDRAW_PATTERN, "Deposit") { matcher, _ ->
-            createTransaction(matcher, "Deposit")
+        ParserRule(MSHWARI_WITHDRAW_PATTERN, "Withdraw") { matcher, _ ->
+            createTransaction(matcher, "Withdraw")
         },
-        ParserRule(MSHWARI_DEPOSIT_PATTERN, "Savings") { matcher, _ ->
-            createTransaction(matcher, "Savings")
+        ParserRule(MSHWARI_DEPOSIT_PATTERN, "Deposit") { matcher, _ ->
+            createTransaction(matcher, "Deposit")
         },
         ParserRule(AIRTIME_PATTERN, "Airtime") { matcher, _ ->
             createTransaction(matcher, "Airtime")

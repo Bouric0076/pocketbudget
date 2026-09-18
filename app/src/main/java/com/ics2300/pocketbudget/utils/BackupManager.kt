@@ -185,13 +185,13 @@ object BackupManager {
                         )
                     txList.add(
                         importedTransaction.copy(
-                            cashFlowBucket = o.optString(
-                                "cashFlowBucket",
-                                CashFlowClassifier.bucket(
-                                    importedTransaction,
-                                    catList.firstOrNull { it.id == importedTransaction.categoryId }?.name
-                                ).name
-                            )
+                            // Recalculate this field so backups created before
+                            // Transfer & Cash became an expense cannot restore
+                            // the obsolete TRANSFER classification.
+                            cashFlowBucket = CashFlowClassifier.bucket(
+                                importedTransaction,
+                                catList.firstOrNull { it.id == importedTransaction.categoryId }?.name
+                            ).name
                         )
                     )
                 }

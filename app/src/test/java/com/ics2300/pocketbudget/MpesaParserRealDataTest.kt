@@ -53,6 +53,6 @@ class MpesaParserRealDataTest {
         
         assertNotNull("Sample 8 failed", parsedTransactions[7]) // M-Shwari
         assertEquals(350.0, parsedTransactions[7]?.amount)
-        assertEquals("Deposit", parsedTransactions[7]?.type)
+        assertEquals("Withdraw", parsedTransactions[7]?.type)
     }
 }

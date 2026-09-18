@@ -190,7 +190,7 @@ class DashboardFragment : Fragment() {
             stats.transactionCount.toString()
         }
         
-        val netFlow = stats.totalIncome - stats.totalExpense
+        val netFlow = stats.totalIncome + stats.totalBorrowed - stats.totalExpense
         binding.textBalanceSummary.text = "Net: ${CurrencyFormatter.formatKsh(netFlow, isPrivacy)}"
         
         // Spending Velocity Indicator

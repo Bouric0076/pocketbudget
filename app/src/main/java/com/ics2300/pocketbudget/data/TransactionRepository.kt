@@ -179,7 +179,21 @@ class TransactionRepository(
                 normalizePartyName(transaction.accountName.orEmpty())
             ).filter { it.isNotBlank() }.distinct()
             val categories = ensureDefaultCategoriesExist()
-            val categoryName = categories.firstOrNull { it.id == categoryId }?.name
+            val requestedCategoryName = categories.firstOrNull { it.id == categoryId }?.name
+            val uncategorizedId = categories.firstOrNull {
+                it.name.equals("Uncategorized", ignoreCase = true)
+            }?.id
+            val safeCategoryId = if (
+                requestedCategoryName.equals("Income", ignoreCase = true) &&
+                    !transaction.type.equals("Received", ignoreCase = true) &&
+                    !transaction.type.equals("Deposit", ignoreCase = true) &&
+                    !transaction.type.equals("Reversal", ignoreCase = true)
+            ) {
+                uncategorizedId ?: categoryId
+            } else {
+                categoryId
+            }
+            val categoryName = categories.firstOrNull { it.id == safeCategoryId }?.name
             val cashFlowBucket = CashFlowClassifier
                 .bucket(transaction, categoryName)
                 .name
@@ -187,7 +201,7 @@ class TransactionRepository(
             transactionDao.updateCategoryAndLearnActors(
                 transactionId = transactionId,
                 actorNames = actorNames,
-                categoryId = categoryId,
+                categoryId = safeCategoryId,
                 cashFlowBucket = cashFlowBucket
             )
         }
@@ -206,16 +220,20 @@ class TransactionRepository(
             }
 
             val category = transactionDao.getCategoryById(categoryId) ?: return@withContext
-            val categoryBucket = when (category.name.lowercase(Locale.US)) {
-                "savings" -> "SAVINGS"
-                "transfer & cash", "transfer" -> "TRANSFER"
+            val uncategorizedCategoryId = transactionDao.getAllCategoriesList()
+                .firstOrNull { it.name.equals("Uncategorized", ignoreCase = true) }
+                ?.id ?: categoryId
+            val categoryBucket = when {
+                category.name.equals("Savings", ignoreCase = true) -> "SAVINGS"
+                category.name.equals("Income", ignoreCase = true) -> "INCOME"
                 else -> "EXPENSE"
             }
 
             transactionDao.bulkCategorizePartyAndLearn(
                 normalizedParty,
                 categoryId,
-                categoryBucket
+                categoryBucket,
+                uncategorizedCategoryId
             )
         }
     }
@@ -403,6 +421,17 @@ class TransactionRepository(
                 )
                 cachedCategories = null
             }
+
+            if (categories.none { it.name.equals("Debt & Credit", true) }) {
+                transactionDao.insertCategory(
+                    CategoryEntity(
+                        name = "Debt & Credit",
+                        keywords = "FULIZA,LOAN,CREDIT,REPAYMENT,OVERDRAFT",
+                        colorHex = CategoryUtils.getDefaultColorHex(10)
+                    )
+                )
+                cachedCategories = null
+            }
         }
 
         return transactionDao.getAllCategoriesList()
@@ -563,9 +592,18 @@ class TransactionRepository(
 
                 "Sent",
                 "Buy Goods",
-                "Paybill" -> {
+                "Paybill",
+                "Withdraw",
+                "Airtime",
+                "Fuliza Repayment",
+                "Fuliza Loan" -> {
+                    val targetName = when {
+                        transaction.type.equals("Airtime", true) -> "Utilities"
+                        transaction.type.startsWith("Fuliza", true) -> "Debt & Credit"
+                        else -> "Transfer"
+                    }
                     categories.find {
-                        it.name.contains("Transfer", true)
+                        it.name.contains(targetName, true)
                     }?.id
                 }
 
@@ -720,10 +758,6 @@ class TransactionRepository(
     private fun keywordMatches(text: String, keyword: String): Boolean {
         if (text.isBlank() || keyword.isBlank()) {
             return false
-        }
-
-        if (keyword.length > 3) {
-            return text.contains(keyword)
         }
 
         return Regex("(^|[^A-Z0-9])${Regex.escape(keyword)}([^A-Z0-9]|$)")
